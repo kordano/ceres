@@ -9,5 +9,6 @@
                  [ring "1.2.2"]
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
-                 [com.novemberain/monger "2.0.0-rc1"]]
+                 [com.novemberain/monger "2.0.0-rc1"]
+                 [twitter-api "0.7.5"]]
   :plugins [[lein-ancient "0.5.4"]])
