@@ -7,19 +7,23 @@
 
 (set! *warn-on-reflection* true)
 
+(def twitter-config
+  {:consumer-key "RfwfMlqMXqWnIofQ8QjU5TpSX"
+   :consumer-secret "tXF0cJM0ltTyMw1363cNWAkflbgzg0LBeFrutFer7E9ksSZaJz"
+   :access-token "108654757-1jR2QjJj3gZINhT7aTdQGKX0pKf3yIKyQGSu322w"
+   :access-token-secret "nbEkOMtOM6Ped8xozXHo6j2sI82k1uH1yOyZPMzuoOcng"})
 
 (defn config-with-password
   "Twitter stream config"
-  ^Configuration []
+  ^Configuration [{:keys [consumer-key consumer-secret access-token access-token-secret]}]
   (let [cb (ConfigurationBuilder.)]
     (.setDebugEnabled cb true)
-    (.setOAuthConsumerKey cb "RfwfMlqMXqWnIofQ8QjU5TpSX")
-    (.setOAuthConsumerSecret cb "tXF0cJM0ltTyMw1363cNWAkflbgzg0LBeFrutFer7E9ksSZaJz")
-    (.setOAuthAccessToken cb "108654757-1jR2QjJj3gZINhT7aTdQGKX0pKf3yIKyQGSu322w")
-    (.setOAuthAccessTokenSecret cb "nbEkOMtOM6Ped8xozXHo6j2sI82k1uH1yOyZPMzuoOcng")
+    (.setOAuthConsumerKey cb consumer-key)
+    (.setOAuthConsumerSecret cb consumer-secret)
+    (.setOAuthAccessToken cb access-token)
+    (.setOAuthAccessTokenSecret cb access-token-secret)
     (.setJSONStoreEnabled cb true)
     (.build cb)))
-
 
 
 (defn status-listener
@@ -39,7 +43,7 @@
 (defn get-twitter-stream-factory
   "Creates the twitter factory for the stream object"
   []
-  (let [factory (TwitterStreamFactory. (config-with-password))]
+  (let [factory (TwitterStreamFactory. (config-with-password twitter-config))]
     (.getInstance factory)))
 
 
