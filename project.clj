@@ -10,6 +10,7 @@
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
                  [com.novemberain/monger "2.0.0-rc1"]
+                 [org.clojure/data.json "0.2.4"]
                  [org.twitter4j/twitter4j-core "4.0.1"]
                  [org.twitter4j/twitter4j-stream "4.0.1"]]
   :plugins [[lein-ancient "0.5.4"]])

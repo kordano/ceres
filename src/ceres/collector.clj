@@ -1,7 +1,7 @@
 (ns ceres.collector
- (:import [twitter4j
-              StatusListener TwitterStream TwitterStreamFactory
-              FilterQuery]
+  (:require [clojure.data.json :as json]
+            [ceres.warehouse :as warehouse])
+  (:import [twitter4j StatusListener TwitterStream TwitterStreamFactory FilterQuery]
            [twitter4j.conf ConfigurationBuilder Configuration]
            [twitter4j.json DataObjectFactory]))
 
@@ -26,12 +26,10 @@
   "Stream handler, currently prints status of a new tweet"
   []
   (proxy [StatusListener] []
-
     (onStatus [^twitter4j.Status status]
-      (println (.getText status))
-      ;(println (DataObjectFactory/getRawJSON status)
-    )
-
+      (let [tweet (json/read-str (DataObjectFactory/getRawJSON status) :key-fn keyword)]
+        (warehouse/insert tweet)
+        (println  (str "[" (:created_at tweet) "] Storing " (:id tweet) " from " (:screen_name (:user tweet))))))
     (onException [^java.lang.Exception e] (.printStackTrace e))
     (onDeletionNotice [^twitter4j.StatusDeletionNotice statusDeletionNotice] ())
     (onScrubGeo [userId upToStatusId] ())
@@ -55,6 +53,6 @@
 
 (comment
 
-  (do-filter-stream [114508061 18016521 5734902 40227292 2834511] ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"])
+  (def stream (do-filter-stream [114508061 18016521 5734902 40227292 2834511] ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]))
 
   )
