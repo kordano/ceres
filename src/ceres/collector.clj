@@ -33,7 +33,7 @@
   (proxy [StatusListener] []
     (onStatus [^twitter4j.Status status]
       (let [tweet (json/read-str (DataObjectFactory/getRawJSON status) :key-fn keyword)]
-        (curator/store-tweet tweet)
+        (warehouse/store tweet)
         (println  (str "[" (:created_at tweet) "] Storing " (:id tweet) " from " (:screen_name (:user tweet))))))
     (onException [^java.lang.Exception e] (.printStackTrace e))
     (onDeletionNotice [^twitter4j.StatusDeletionNotice statusDeletionNotice] ())
@@ -55,9 +55,3 @@
         stream (get-twitter-stream-factory)]
     (.addListener stream (status-listener))
     (.filter stream filter-query)))
-
-(comment
-
-  (def stream (do-filter-stream [114508061 18016521 5734902 40227292 2834511] ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]))
-
-  )

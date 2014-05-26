@@ -9,7 +9,7 @@
 
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [clj-time "0.7.0"]
-                 [compojure "1.1.6"]
+                 [compojure "1.1.8"]
                  [ring "1.2.2"]
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
