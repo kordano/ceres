@@ -11,8 +11,8 @@
     (+ 1 (min
       (prevrow (- position 1))
       (prevrow position)
-      (last thisrow))))
-  )
+      (last thisrow)))))
+
 
 (defn nextrow
   "Based on the next character from string1 and the whole of string2
@@ -27,6 +27,7 @@
         (rest str2)
         prevrow
         (conj thisrow (nextelt char1 char2 prevrow thisrow position))))))
+
 
 (defn levenshtein
   "Calculate the Levenshtein distance between two strings."

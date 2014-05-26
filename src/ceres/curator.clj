@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [assoc! conj! dissoc! ==])
   (:require [clojure.core :as core]
             [com.ashafa.clutch.utils :as utils]
-            [com.ashafa.clutch :refer [save-view view-server-fns with-db get-database get-document put-document update-document all-documents]]))
+            [com.ashafa.clutch :refer [with-db get-database get-document put-document update-document all-documents]]))
 
 
 (defn now [] (new java.util.Date))
@@ -38,37 +38,3 @@
   "Get all tweets posted by a specific user"
   [username]
   (filter #(= (-> % :user :screen_name) username) (get-all-tweets)))
-
-
-(comment
-
-  (with-db (database-url "tweets")
-    (->> (all-documents)
-         (mapv :id)
-         (mapv #(get-document %))
-         (filter #(= "olibrecht" (-> % :user :screen_name)))
-         time))
-
-  (with-db "tweets"
-  (save-view "test1"
-    (view-server-fns :cljs
-      {:your-view-name {:map (fn [doc]
-                               (js/emit (aget doc "_id") nil))}})))
-
-
-  (defn create-index
-    [news-accounts]
-    (->> (map
-          (fn [account]
-            (vec [account
-                  (->> (get-news account)
-                       (map #(vec [(:id %)
-                                   (into {} [[:tweet %]
-                                             [:retweets {}]
-                                             [:replies {}]
-                                             [:shared {}]])]))
-                       vec
-                       (into {}))]))
-          news-accounts)
-         vec
-         (into {}))))
