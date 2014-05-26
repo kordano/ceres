@@ -1,6 +1,7 @@
 (ns ceres.collector
   (:require [clojure.data.json :as json]
-            [ceres.warehouse :as warehouse])
+            [ceres.warehouse :as warehouse]
+            [ceres.curator :as curator])
   (:import [twitter4j StatusListener TwitterStream TwitterStreamFactory FilterQuery]
            [twitter4j.conf ConfigurationBuilder Configuration]
            [twitter4j.json DataObjectFactory]))
@@ -32,7 +33,7 @@
   (proxy [StatusListener] []
     (onStatus [^twitter4j.Status status]
       (let [tweet (json/read-str (DataObjectFactory/getRawJSON status) :key-fn keyword)]
-        (warehouse/insert tweet)
+        (curator/store-tweet tweet)
         (println  (str "[" (:created_at tweet) "] Storing " (:id tweet) " from " (:screen_name (:user tweet))))))
     (onException [^java.lang.Exception e] (.printStackTrace e))
     (onDeletionNotice [^twitter4j.StatusDeletionNotice statusDeletionNotice] ())

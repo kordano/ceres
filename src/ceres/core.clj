@@ -7,6 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [run-server]]
             [ceres.collector :as collector]
+            [ceres.curator :as curator]
             [ceres.view :as view]))
 
 
@@ -18,11 +19,13 @@
 
 (defn -main [& args]
   (println "Start streaming...")
+  (curator/init-db)
   (collector/do-filter-stream
    [114508061 18016521 5734902 40227292 2834511]
    ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]))
 
 #_(def server
+
     (run-server (site #'all-routes) {:port 8081 :join? false}))
 
 #_(server)
