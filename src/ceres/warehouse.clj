@@ -3,6 +3,9 @@
             [monger.collection :as mc]
             [monger.operators :refer :all]
             [monger.conversion :refer [from-db-object]]
+            [ceres.inspector :refer [levenshtein]]
+            [clojure.string :refer [split]]
+            [clojure.data.json :as json]
             [clj-time.format :as f]
             [clj-time.core :as t]))
 
@@ -12,8 +15,14 @@
 
 (def coll "tweets")
 
+(defn read-data [path]
+  (split (slurp path) #"\n"))
+
+#_(time (doall (map #(insert (json/read-str % :key-fn keyword)) (read-data "/home/konny/data/tweets.json"))))
+
 (defn insert [tweet]
   (mc/insert db coll tweet))
+
 
 (defn inverted-index [news-accounts]
   (->> (mc/find db coll {"entities.user_mentions.screen_name" {$in news-accounts}})
@@ -49,24 +58,30 @@
        (map #(from-db-object % true))))
 
 
+(defn get-replies [id]
+  (->> (mc/find db coll {"in_reply_to_status_id" id})
+       seq
+       (map #(from-db-object % true))))
+
+
+(defn assemble [news-accounts]
+  (->> (map
+        (fn [account]
+          (vec [account
+                (->> (get-news account)
+                     (map #(vec [(:id %)
+                                 (into {} [[:tweet %]
+                                           [:retweets {}]
+                                           [:replies {}]
+                                           [:shared {}]])]))
+                     vec
+                     (into {}))]))
+        news-accounts)
+       vec
+       (into {})))
+
 (comment
 
   (def news-accounts ["FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"])
-
-  (reduce + (map #(count (get-news %)) news-accounts))
-
-  (->> (get-news "dpa")
-       (sort-by :created_at t/after?))
-
-  (->> (reduce (fn [old [k v]] (update-in old [k] (fn [x] (conj (or x #{}) v)))) {} (inverted-index news-accounts)) (map #(vec [(key %) (count (val %))]))
-       (sort-by second >)
-       (map second)
-       frequencies
-       (sort-by val >)
-       time)
-
-  (->> (mc/find db coll)
-       seq
-       last)
 
 )
