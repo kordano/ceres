@@ -15,6 +15,7 @@
                  [http-kit "2.1.18"]
                  [com.novemberain/monger "2.0.0-rc1"]
                  [org.clojure/data.json "0.2.4"]
+                 [incanter "1.5.5"]
                  [gezwitscher "0.1.0"]
                  [com.ashafa/clutch "0.4.0-RC1"]
                  [org.twitter4j/twitter4j-core "4.0.1"]

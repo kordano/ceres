@@ -2,8 +2,8 @@
   (:require [monger.core :as mg]
             [monger.collection :as mc]
             [monger.operators :refer :all]
-            [monger.conversion :refer [from-db-object]]
             [clojure.string :refer [split]]
+            [monger.conversion :refer [from-db-object]]
             [clojure.data.json :as json]
             [clj-time.format :as f]
             [clj-time.core :as t]))
@@ -76,5 +76,7 @@
   (swap! data-node (create-index news-accounts))
 
   (time (create-index news-accounts))
+
+  (-> (mc/find db coll) seq first (from-db-object true))
 
 )

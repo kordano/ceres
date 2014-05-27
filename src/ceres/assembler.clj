@@ -1,6 +1,6 @@
 (ns ceres.assembler
   (:require [net.cgrand.enlive-html :refer [deftemplate append html]]
-            [ceres.warehouse :as warehouse]
+            [ceres.curator :as curator]
             [clojure.java.io :as io]))
 
 (def news-accounts ["FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"])

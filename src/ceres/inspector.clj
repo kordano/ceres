@@ -1,5 +1,6 @@
 (ns ceres.inspector
-  (:require [ceres.curator :refer [get-tweets get-mentions get-retweets get-replies]]))
+  (:require [ceres.curator :refer [get-tweets get-mentions get-retweets get-replies]]
+            [incanter.stats :refer [dice-coefficient-str]]))
 
 ;; from http://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#Clojure
 
@@ -30,11 +31,11 @@
         (conj thisrow (nextelt char1 char2 prevrow thisrow position))))))
 
 
-(defn levenshtein
+(defn levenshtein-distance
   "Calculate the Levenshtein distance between two strings."
   ([str1 str2]
   (let [row0 (vec (map first (map vector (iterate inc 1) str2)))]
-    (levenshtein 1 (vec (cons 0 row0)) str1 str2)))
+    (levenshtein-distance 1 (vec (cons 0 row0)) str1 str2)))
   ([row-nr prevrow str1 str2]
     (let [next-row (nextrow (first str1) str2 prevrow (vector row-nr))
           str1-remainder (.substring str1 1)]
@@ -58,3 +59,9 @@
         users)
        vec
        (into {})))
+
+(comment
+
+  (time (dice-coefficient-str "Linkspartei: Abschied von Rot-Rot-Grün http://t.co/bvuMUtt8oi via @faz_net" "Fußball-Nationalmannschaft : Löws Klein-Klein  http://t.co/t83EYklLE5 via @faz_net"))
+
+  )
