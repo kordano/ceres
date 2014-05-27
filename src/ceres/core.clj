@@ -6,7 +6,7 @@
             [compojure.handler :refer [site]]
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [run-server]]
-            [ceres.warehouse :refer [store]]
+            [ceres.curator :refer [store]]
             [gezwitscher.core :refer [start-filter-stream]]
             [ceres.view :as view]))
 

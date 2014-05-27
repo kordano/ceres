@@ -1,4 +1,5 @@
-(ns ceres.inspector)
+(ns ceres.inspector
+  (:require [ceres.curator :refer [get-tweets get-mentions get-retweets get-replies]]))
 
 ;; from http://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#Clojure
 
@@ -40,3 +41,20 @@
       (if (= "" str1-remainder)
         (last next-row)
         (recur (inc row-nr) next-row str1-remainder str2)))))
+
+
+(defn create-index [users]
+  (->> (map
+        (fn [user]
+          (vec [user
+                (->> (get-tweets user)
+                     (map #(vec [(:id %)
+                                 (into {} [[:tweet %]
+                                           [:retweets {}]
+                                           [:replies {}]
+                                           [:shared {}]])]))
+                     vec
+                     (into {}))]))
+        users)
+       vec
+       (into {})))

@@ -1,4 +1,4 @@
-(ns ceres.warehouse
+(ns ceres.curator
   (:require [monger.core :as mg]
             [monger.collection :as mc]
             [monger.operators :refer :all]
@@ -68,24 +68,6 @@
   (->> (mc/find db coll {"in_reply_to_status_id" id})
        seq
        (map #(from-db-object % true))))
-
-
-(defn create-index [users]
-  (->> (map
-        (fn [user]
-          (vec [user
-                (->> (get-tweets user)
-                     (map #(vec [(:id %)
-                                 (into {} [[:tweet %]
-                                           [:retweets {}]
-                                           [:replies {}]
-                                           [:shared {}]])]))
-                     vec
-                     (into {}))]))
-        users)
-       vec
-       (into {})))
-
 
 
 (comment
