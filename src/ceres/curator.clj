@@ -3,7 +3,6 @@
             [monger.collection :as mc]
             [monger.operators :refer :all]
             [monger.conversion :refer [from-db-object]]
-            [ceres.inspector :refer [levenshtein]]
             [clojure.string :refer [split]]
             [clojure.data.json :as json]
             [clj-time.format :as f]
