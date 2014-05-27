@@ -1,4 +1,4 @@
-(ns ceres.view
+(ns ceres.assembler
   (:require [net.cgrand.enlive-html :refer [deftemplate append html]]
             [ceres.warehouse :as warehouse]
             [clojure.java.io :as io]))

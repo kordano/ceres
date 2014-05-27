@@ -8,7 +8,7 @@
             [org.httpkit.server :refer [run-server]]
             [ceres.curator :refer [store]]
             [gezwitscher.core :refer [start-filter-stream]]
-            [ceres.view :as view]))
+            [ceres.assembler :refer [page detail]]))
 
 (def twitter-state
   {:credentials {:consumer-key (or (System/getenv "TWITTER_API_KEY") "****")
@@ -24,8 +24,8 @@
 
 (defroutes all-routes
   (resources "/")
-  (POST "/detail" [] view/detail)
-  (GET "/*" [] (view/page)))
+  (POST "/detail" [] detail)
+  (GET "/*" [] (page)))
 
 
 (defn -main [& args]
