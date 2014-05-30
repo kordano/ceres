@@ -8,7 +8,9 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.6.0"]
+                 [org.clojure/clojurescript "0.0-2227"]
                  [org.clojure/data.json "0.2.4"]
+                 [org.clojure/core.async "0.1.303.0-886421-alpha"]
                  [clj-time "0.7.0"]
 
                  [compojure "1.1.8"]
@@ -19,11 +21,35 @@
                  [gezwitscher "0.1.1-SNAPSHOT"]
                  [com.novemberain/monger "2.0.0-rc1"]
                  [incanter "1.5.5"]
+                 [kioo "0.4.0"]
+                 [figwheel "0.1.3-SNAPSHOT"]
+                 [com.facebook/react "0.9.0.1"]
+                 [om "0.6.3"]
 
+                 [com.cemerick/piggieback "0.1.3"]
+                 [weasel "0.2.0"]
                  [com.taoensso/timbre "3.2.1"]]
 
   :main ceres.core
 
+  :source-paths ["src/cljs" "src/clj"]
+
+  :min-lein-version "2.0.0"
+
   :uberjar-name "ceres-standalone.jar"
 
-  :plugins [[lein-ancient "0.5.4"]])
+  :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
+
+  :plugins [[lein-cljsbuild "1.0.3"]
+            [lein-figwheel "0.1.3-SNAPSHOT"]]
+
+  :figwheel {:http-server-root "public"
+             :port 3449
+             :css-dirs ["resources/public/css"]}
+
+  :cljsbuild {:builds [{:source-paths ["src/cljs"]
+                :compiler
+                {:output-to "resources/public/js/compiled/main.js"
+                 :output-dir "resources/public/js/compiled/out"
+                 :optimizations :none
+                 :source-map true}}]})
