@@ -119,17 +119,13 @@
        seq
        (map #(from-db-object % true))))
 
+(defn get-recent-tweets []
+  )
 
 (comment
 
   (->> (mc/find (:db @mongo-state) "tweets")
-       seq
-       (map #(from-db-object % true))
-       (map #(-> % :user :screen_name))
-       frequencies
-       (map second)
-       frequencies
-       (sort-by first <))
-
+       (take-last 25)
+       seq)
 
   )
