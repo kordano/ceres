@@ -39,13 +39,17 @@
 (defsnippet tweet-item "templates/main.html" [:.tweet-item]
   [tweet owner]
   {[:.tweet-text] (content (:text tweet))
-   [:.tweet-author] (content (:author tweet))
+   [:.tweet-author] (content (str "@" (:author tweet)))
    [:.tweet-timestamp] (content (:timestamp tweet))
    [:.tweet-reaction] (content
                        (let [reaction (or (:retweet tweet) (:reply tweet))]
                          (if reaction
                            (html [:span.glyphicon.glyphicon-retweet])
-                           "")))})
+                           "")))
+   [:.tweet-url] (if (:url tweet)
+                   (do-> (set-attr "href" (:url tweet))
+                         (content (:url tweet)))
+                   (content ""))})
 
 
 

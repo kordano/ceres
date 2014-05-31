@@ -24,6 +24,10 @@
    :author (-> tweet :user :screen_name)
    :text (:text tweet)
    :reply (:in_reply_to_status_id_str tweet)
+   :url (let [urls (-> tweet :entities :urls)]
+          (if (empty? urls)
+            nil
+            (-> urls first :url)))
    :retweet (if (:retweeted_status tweet)
               (-> tweet :retweeted_status :id)
               nil)})
