@@ -58,23 +58,23 @@
   (case topic
     :greeting {:recent-tweets (mapv extract-tweet-data (:recent-tweets @twitter-state))}))
 
+
 (defn tweet-handler [request]
   (let [out-chan (chan)]
     (with-channel request channel
       (swap! twitter-state update-in [:out-chans] conj out-chan)
       (go-loop [m (<! out-chan)]
         (when m
-          (debug "sending msg to" out-chan ":" (pr-str m))
           (send! channel (pr-str m))
           (recur (<! out-chan))))
       (on-close channel
                 (fn [status]
                   (swap! twitter-state update-in [:out-chans] (fn [old new] (vec (remove #(= new %) old))) out-chan)
                   (close! out-chan)
-                  (info "tweet channel closed: " status)))
+                  (info "tweet channel closed: " status "!")))
       (on-receive channel
                   (fn [data]
-                    (info (str "receiving msg: " (java.util.Date.)))
+                    (info "tweet channel opened!")
                     (send! channel (str (dispatch (read-string data)))))))))
 
 
