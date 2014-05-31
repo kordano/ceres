@@ -12,6 +12,9 @@
 
 (enable-console-print!)
 
+
+(def uri (goog.Uri. js/document.URL))
+
 (println "Greetings commander")
 
 ;; fire up repl
@@ -61,7 +64,7 @@
     om/IWillMount
     (will-mount [_]
       (go
-        (let [connection (<! (connect! (str "ws://localhost:8081/tweets/ws")))]
+        (let [connection (<! (connect! (str "ws://" (.getDomain uri) ":" (.getPort uri) "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
             (>! (:in connection) {:topic :greeting :data ""})

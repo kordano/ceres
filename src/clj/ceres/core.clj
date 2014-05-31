@@ -29,24 +29,22 @@
               nil)})
 
 
-(defn twitter-handler [tweet]
-  "Stores incoming tweets and notifies clients"
-  (do
-    (info (str "Storing tweet") (:id tweet))
-    (store tweet)
-    (put! (:out-chan @twitter-state) (extract-tweet-data tweet))
-    (swap! twitter-state update-in [:recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
-
-
 (def twitter-state
   (atom
    {:credentials {:consumer-key (or (System/getenv "TWITTER_API_KEY") "****")
                   :consumer-secret (or (System/getenv "TWITTER_API_SECRET") "****")
                   :access-token (or (System/getenv "TWITTER_ACCESS_TOKEN") "****")
                   :access-token-secret (or (System/getenv "TWITTER_ACCESS_TOKEN_SECRET") "****")}
-    :handler  twitter-handler
+    :handler  (fn [tweet]
+                (do
+                  (info (str "Storing tweet") (:id tweet))
+                  (store tweet)
+                  (let [data (extract-tweet-data tweet)]
+                    (doall
+                     (map #(put! % data) (:out-chans @twitter-state))))
+                  (swap! twitter-state update-in [:recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
     :recent-tweets []
-    :out-chan (chan)
+    :out-chans []
     :follow [114508061 18016521 5734902 40227292 2834511]
     :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]}))
 
@@ -56,22 +54,23 @@
   (case topic
     :greeting {:recent-tweets (mapv extract-tweet-data (:recent-tweets @twitter-state))}))
 
-
 (defn tweet-handler [request]
-  (with-channel request channel
-    (go-loop [m (<! (:out-chan @twitter-state))]
-      (when m
-        (debug "sending msg:" (pr-str m))
-        (send! channel (pr-str m))
-        (recur (<! (:out-chan @twitter-state)))))
-    (on-close channel
-              (fn [status]
-                (swap! twitter-state assoc-in [:out-chan] (chan))
-                (info "tweet channel closed: " status)))
-    (on-receive channel
-                (fn [data]
-                  (info (str "receiving msg: " (java.util.Date.)))
-                  (send! channel (str (dispatch (read-string data))))))))
+  (let [out-chan (chan)]
+    (with-channel request channel
+      (swap! twitter-state update-in [:out-chans] conj out-chan)
+      (go-loop [m (<! out-chan)]
+        (when m
+          (debug "sending msg:" (pr-str m))
+          (send! channel (pr-str m))
+          (recur (<! out-chan))))
+      (on-close channel
+                (fn [status]
+                  (swap! twitter-state update-in [:out-chans] (fn [old new] (remove #(= new %) old)) out-chan)
+                  (info "tweet channel closed: " status)))
+      (on-receive channel
+                  (fn [data]
+                    (info (str "receiving msg: " (java.util.Date.)))
+                    (send! channel (str (dispatch (read-string data)))))))))
 
 
 (defroutes all-routes
@@ -92,7 +91,7 @@
 
   (stop-stream)
 
-  (def server (run-server (site #'all-routes) {:port 8081 :join? false}))
+  (def server (run-server (site #'all-routes) {:port 8082 :join? false}))
 
   (server)
 
