@@ -10,7 +10,7 @@
             [gezwitscher.core :refer [start-filter-stream]]
             [ceres.assembler :refer [page detail]]
             [clojure.java.io :as io]
-            [clojure.core.async :refer [put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
+            [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
 
 (timbre/refer-timbre)
@@ -64,12 +64,13 @@
       (swap! twitter-state update-in [:out-chans] conj out-chan)
       (go-loop [m (<! out-chan)]
         (when m
-          (debug "sending msg:" (pr-str m))
+          (debug "sending msg to" out-chan ":" (pr-str m))
           (send! channel (pr-str m))
           (recur (<! out-chan))))
       (on-close channel
                 (fn [status]
-                  (swap! twitter-state update-in [:out-chans] (fn [old new] (remove #(= new %) old)) out-chan)
+                  (swap! twitter-state update-in [:out-chans] (fn [old new] (vec (remove #(= new %) old))) out-chan)
+                  (close! out-chan)
                   (info "tweet channel closed: " status)))
       (on-receive channel
                   (fn [data]

@@ -36,6 +36,7 @@
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
+
 (defsnippet tweet-item "templates/main.html" [:.tweet-item]
   [tweet owner]
   {[:.tweet-text] (content (:text tweet))
@@ -56,6 +57,7 @@
 (deftemplate main-view "templates/main.html" [data owner]
   {[:#tweet-collection] (content (doall (map #(tweet-item % owner) data)))})
 
+
 (defn tweets-view
   [app owner]
   (reify
@@ -74,8 +76,7 @@
             (>! (:in connection) {:topic :greeting :data ""})
             (loop []
               (let [new-tweet (<! (:out connection))]
-                (println new-tweet)
-                (om/transact! app :tweets (fn [tweets] (if (:recent-tweets new-tweet) (:recent-tweets new-tweet)  (into [new-tweet] tweets))))
+                (om/transact! app :tweets (fn [tweets] (if (:recent-tweets new-tweet) (:recent-tweets new-tweet)  (vec (take 100 (into [new-tweet] tweets))))))
                 (recur))))))
 
     om/IRenderState
