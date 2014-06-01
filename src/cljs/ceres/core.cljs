@@ -12,8 +12,9 @@
 
 (enable-console-print!)
 
-
 (def uri (goog.Uri. js/document.URL))
+
+(def ssl? (= (.getScheme uri) "https"))
 
 (println "Greetings commander")
 
@@ -35,6 +36,7 @@
 #_(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
+
 
 
 (defsnippet tweet-item "templates/main.html" [:.tweet-item]
@@ -70,7 +72,13 @@
     om/IWillMount
     (will-mount [_]
       (go
-        (let [connection (<! (connect! (str "ws://" (.getDomain uri) ":" (.getPort uri) "/tweets/ws")))]
+        (let [connection (<! (connect!
+                              (str
+                               (if ssl?  "wss://" "ws://")
+                               (.getDomain uri)
+                               ":" (.getPort uri)
+                               "/tweets/ws")
+                              ))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
             (>! (:in connection) {:topic :greeting :data ""})
