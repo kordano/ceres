@@ -25,7 +25,7 @@
   [:#bootstrap-theme-css] (set-attr "src" "static/bootstrap/css/bootstrap-theme.min.css")
   [:#react-js] (set-attr "src" "static/react/react-0.9.0.min.js")
   [:#jquery-js] (set-attr "src" "static/jquery/jquery-1.11.0.min.js")
-  [:#bootstrap-js] (set-attr "src" "static/bootstrap/3.1.1/js/bootstrap.min.js")
+  [:#bootstrap-js] (set-attr "src" "static/bootstrap/js/bootstrap.min.js")
   [:#js-files] (substitute (html [:script {:src "static/main.js" :type "text/javascript"}])))
 
 
