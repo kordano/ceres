@@ -57,5 +57,5 @@
                 :source-map true}}
     :prod
     {:source-paths ["src/cljs"]
-     :compiler {:output-to "resources/public/static/main.js"
+     :compiler {:output-to "resources/public/js/main.js"
                 :optimizations :simple}}}})

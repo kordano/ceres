@@ -21,12 +21,12 @@
 (deftemplate static-page
   (io/resource "public/index.html")
   []
-  [:#bootstrap-css] (set-attr "src" "static/bootstrap/css/bootstrap.min.css")
-  [:#bootstrap-theme-css] (set-attr "src" "static/bootstrap/css/bootstrap-theme.min.css")
+  [:#bootstrap-css] (set-attr "href" "static/bootstrap/bootstrap-3.1.1-dist/css/bootstrap.min.css")
+  [:#bootstrap-theme-css] (set-attr "href" "static/bootstrap/bootstrap-3.1.1-dist/css/bootstrap-theme.min.css")
   [:#react-js] (set-attr "src" "static/react/react-0.9.0.min.js")
   [:#jquery-js] (set-attr "src" "static/jquery/jquery-1.11.0.min.js")
-  [:#bootstrap-js] (set-attr "src" "static/bootstrap/js/bootstrap.min.js")
-  [:#js-files] (substitute (html [:script {:src "static/main.js" :type "text/javascript"}])))
+  [:#bootstrap-js] (set-attr "src" "static/bootstrap/bootstrap-3.1.1-dist/js/bootstrap.min.js")
+  [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
 
 (defn extract-tweet-data [tweet]
