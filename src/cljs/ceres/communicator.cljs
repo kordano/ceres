@@ -38,7 +38,7 @@
                             (.log js/console "channel closed")
                             (close! in)
                             (close! out)))
-          (events/listen event-type/ERROR (fn [e] (.log js/console (str "ERROR:" e))))
+          (events/listen event-type/ERROR (fn [e] (.log js/console (str "ERROR:" (.-message e)))))
           (.open uri))
         (go
           (<! on-connect)
