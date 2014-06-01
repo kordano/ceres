@@ -23,8 +23,8 @@
                  [incanter "1.5.5"]
                  [kioo "0.4.0"]
                  [figwheel "0.1.3-SNAPSHOT"]
-                 [com.facebook/react "0.9.0.1"]
-                 [om "0.6.3"]
+                 [com.facebook/react "0.9.0.2"]
+                 [om "0.6.4"]
 
                  [com.cemerick/piggieback "0.1.3"]
                  [weasel "0.2.0"]
@@ -47,9 +47,15 @@
              :port 3449
              :css-dirs ["resources/public/css"]}
 
-  :cljsbuild {:builds [{:source-paths ["src/cljs"]
-                :compiler
-                {:output-to "resources/public/js/compiled/main.js"
-                 :output-dir "resources/public/js/compiled/out"
-                 :optimizations :none
-                 :source-map true}}]})
+  :cljsbuild
+  {:builds
+   {:dev
+    {:source-paths ["src/cljs"]
+     :compiler {:output-to "resources/public/js/compiled/main.js"
+                :output-dir "resources/public/js/compiled/out"
+                :optimizations :none
+                :source-map true}}
+    :prod
+    {:source-paths ["src/cljs"]
+     :compiler {:output-to "resources/public/static/main.js"
+                :optimizations :simple}}}})
