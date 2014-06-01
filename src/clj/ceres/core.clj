@@ -21,8 +21,8 @@
 (deftemplate static-page
   (io/resource "public/index.html")
   []
-  [:#bootstrap-css] (set-attr "src" "static/bootstrap/3.1.1/css/bootstrap.min.css")
-  [:#bootstrap-theme-css] (set-attr "src" "static/bootstrap/3.1.1/css/bootstrap-theme.min.css")
+  [:#bootstrap-css] (set-attr "src" "static/bootstrap/css/bootstrap.min.css")
+  [:#bootstrap-theme-css] (set-attr "src" "static/bootstrap/css/bootstrap-theme.min.css")
   [:#react-js] (set-attr "src" "static/react/react-0.9.0.min.js")
   [:#jquery-js] (set-attr "src" "static/jquery/jquery-1.11.0.min.js")
   [:#bootstrap-js] (set-attr "src" "static/bootstrap/3.1.1/js/bootstrap.min.js")
