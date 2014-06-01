@@ -77,14 +77,19 @@
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
                                ":" (.getPort uri)
-                               "/tweets/ws")
-                              ))]
+                               "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
             (>! (:in connection) {:topic :greeting :data ""})
             (loop []
               (let [new-tweet (<! (:out connection))]
-                (om/transact! app :tweets (fn [tweets] (if (:recent-tweets new-tweet) (:recent-tweets new-tweet)  (vec (take 100 (into [new-tweet] tweets))))))
+                (om/transact!
+                 app
+                 :tweets
+                 (fn [tweets]
+                   (if (:recent-tweets new-tweet)
+                     (:recent-tweets new-tweet)
+                     (vec (take 100 (into [new-tweet] tweets))))))
                 (recur))))))
 
     om/IRenderState
