@@ -76,8 +76,7 @@
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
                                ":"
-                               8082
-                               #_(.getPort uri)
+                               (.getPort uri)
                                "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
