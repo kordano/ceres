@@ -30,13 +30,12 @@
 
 (def app-state
   (atom
-   {:tweets
-    []}))
+   {:tweets []
+    :tweet-count 0}))
 
 #_(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
-
 
 
 (defsnippet tweet-item "templates/main.html" [:.tweet-item]
@@ -55,18 +54,18 @@
                    (content ""))})
 
 
-
 (deftemplate main-view "templates/main.html" [data owner]
-  {[:#tweet-collection] (content (doall (map #(tweet-item % owner) data)))})
+  {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
+   [:#tweet-overall-count] (content (:tweet-count data))})
 
 
 (defn tweets-view
+  "Shows recent tweets, connects to server and updates automatically, "
   [app owner]
   (reify
     om/IInitState
     (init-state [_]
       {:ws-in (chan)
-       :incoming (chan)
        :ws-out (chan)})
 
     om/IWillMount
@@ -76,7 +75,9 @@
                               (str
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
-                               ":" (.getPort uri)
+                               ":"
+                               8082
+                               #_(.getPort uri)
                                "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
@@ -90,11 +91,18 @@
                    (if (:recent-tweets new-tweet)
                      (:recent-tweets new-tweet)
                      (vec (take 100 (into [new-tweet] tweets))))))
+                (om/transact!
+                 app
+                 :tweet-count
+                 (fn [tweet-count]
+                   (if (:tweet-count new-tweet)
+                     (:tweet-count new-tweet)
+                     (inc tweet-count))))
                 (recur))))))
 
     om/IRenderState
     (render-state [this {:keys [ws-out] :as state}]
-      (om/build main-view (:tweets app) {:init-state state}))))
+      (om/build main-view app {:init-state state}))))
 
 
 (om/root

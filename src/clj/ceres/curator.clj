@@ -20,7 +20,7 @@
               ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
           (mg/get-db (mg/connect sa opts) "athena"))
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
-    news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
+    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
 
 
 (defn- expand-url
@@ -131,8 +131,10 @@
        (mapv #(from-db-object % true))))
 
 (defn get-news-frequencies []
-  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %})]) (news-accounts @mongo-state)))
+  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %})]) (:news-accounts @mongo-state)))
 
+(defn get-tweet-count []
+  (mc/count (:db @mongo-state) "tweets"))
 
 (comment
 

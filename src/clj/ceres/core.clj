@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store]]
+            [ceres.curator :refer [store get-tweet-count]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -74,10 +74,12 @@
 (defn dispatch [{:keys [topic data]}]
   "Dispatch incoming websocket-requests"
   (case topic
-    :greeting {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))}))
+    :greeting {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
+               :tweet-count (get-tweet-count)}))
 
 
 (defn tweet-handler [request]
+  "Handle incoming tweets"
   (let [out-chan (chan)]
     (with-channel request channel
       (swap! server-state update-in [:twitter :out-chans] conj out-chan)
