@@ -12,6 +12,7 @@
                  [org.clojure/data.json "0.2.4"]
                  [org.clojure/core.async "0.1.303.0-886421-alpha"]
                  [clj-time "0.7.0"]
+                 [cheshire "5.3.1"]
 
                  [compojure "1.1.8"]
                  [ring "1.2.2"]

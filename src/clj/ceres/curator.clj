@@ -2,10 +2,11 @@
   (:require [monger.core :as mg]
             [monger.collection :as mc]
             [monger.operators :refer :all]
+            [monger.conversion :refer [from-db-object]]
+            [monger.joda-time]
             [clojure.string :refer [split]]
             [net.cgrand.enlive-html :as enlive]
-            [monger.conversion :refer [from-db-object]]
-            [clojure.data.json :as json]
+            [clojure.data.json :as djson]
             [clj-time.format :as f]
             [taoensso.timbre :as timbre]
             [clj-time.core :as t])
@@ -19,7 +20,7 @@
               ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
           (mg/get-db (mg/connect sa opts) "athena"))
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
-    :news-account #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
+    news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
 
 
 (defn- expand-url
@@ -36,6 +37,7 @@
                 expanded-url)
             (catch Exception e (do (error (str e))
                                    (str "Not available"))))))))
+
 
 (defn store-news
   "Stores news data"
@@ -65,9 +67,9 @@
   "Stores the given tweet in mongodb"
   [tweet]
   (let [oid (ObjectId.)
-        doc tweet
+        doc (update-in tweet [:created_at] (fn [x] (f/parse (:custom-formatter @mongo-state) x)))
         record (mc/insert-and-return (:db @mongo-state) "tweets" (merge doc {:_id oid}))]
-    (if ((:news-account @mongo-state) (-> tweet :user :screen_name))
+    (if ((:news-accounts @mongo-state) (-> record :user :screen_name))
       (store-news record)
       record)))
 
@@ -76,7 +78,9 @@
 (defn read-data
   "Reads in json data from given path and stores it"
   [path]
-  (doall (map #(store (json/read-str % :key-fn keyword)) (split (slurp path) #"\n"))))
+  (doall (map #(let [data (djson/read-str % :key-fn keyword)]
+                 (println "Importing " (:id data))
+                 (store data)) (split (slurp path) #"\n"))))
 
 
 (defn get-retweets
@@ -92,8 +96,7 @@
   [user]
   (->> (mc/find (:db @mongo-state) "tweets" {"user.screen_name" user})
        seq
-       (map #(from-db-object % true))
-       (map #(update-in % [:created_at] (fn [x] (f/parse (:custom-formatter @mongo-state) x))))))
+       (map #(from-db-object % true))))
 
 
 (defn get-mentions
@@ -119,13 +122,31 @@
        seq
        (map #(from-db-object % true))))
 
-(defn get-recent-tweets []
-  )
+
+(defn get-recent-tweets [page]
+  (->> (mc/find (:db @mongo-state) "tweets")
+       seq
+       (take-last (+ (* page 25) 100))
+       (take 25)
+       (mapv #(from-db-object % true))))
+
+(defn get-news-frequencies []
+  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %})]) (news-accounts @mongo-state)))
+
 
 (comment
 
-  (->> (mc/find (:db @mongo-state) "tweets")
-       (take-last 25)
-       seq)
+  (->> (mc/find (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 05 14)  $lte (t/date-time 2014 05 15)}})
+       seq
+       first)
+
+  ;; TODO update on server
+  (time
+   (doseq [x (monger.collection/find-maps (:db @mongo-state) "tweets")]
+     (mc/update-by-id
+      (:db @mongo-state)
+      "tweets"
+      (:_id x)
+      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
   )
