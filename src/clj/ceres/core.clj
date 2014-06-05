@@ -112,12 +112,15 @@
     (info "Starting twitter collector...")
     (info (clojure.pprint/pprint @server-state))
     (run-server (site #'all-routes) {:port (Integer/parseInt port) :join? false})
-    (start-filter-stream (:twitter @server-state))))
+    (let [{:keys [follow track handler credentials]} (:twitter @server-state)]
+      (start-filter-stream follow track handler credentials))))
 
 
 (comment
 
-  (def stop-stream (start-filter-stream (:twitter @server-state)))
+  (def stop-stream
+    (let [{:keys [follow track handler credentials]} (:twitter @server-state)]
+      (start-filter-stream follow track handler credentials)))
 
   (stop-stream)
 
@@ -125,4 +128,4 @@
 
   (server)
 
-  )
+)
