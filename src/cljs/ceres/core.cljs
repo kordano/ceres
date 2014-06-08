@@ -38,7 +38,7 @@
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
 
-(defsnippet tweet-item "templates/main.html" [:.tweet-item]
+(defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
   [tweet owner]
   {[:.tweet-text] (content (:text tweet))
    [:.tweet-author] (content (str "@" (:author tweet)))
@@ -54,7 +54,13 @@
                    (content ""))})
 
 
-(deftemplate main-view "templates/main.html" [data owner]
+(deftemplate navbar "templates/navbar.html" [app]
+  {[:#ceres-brand] (content "Collector")
+   [:#tweet-list-link] (listen :onClick #(.log js/console "tweet list"))
+   [:#statistics-link] (listen :onClick #(.log js/console "statistics"))})
+
+
+(deftemplate tweet-list "templates/tweet-list.html" [data owner]
   {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
    [:#tweet-overall-count] (content (:tweet-count data))})
 
@@ -76,7 +82,7 @@
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
                                ":"
-                               (.getPort uri)
+                               8082 #_(.getPort uri)
                                "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
@@ -101,10 +107,17 @@
 
     om/IRenderState
     (render-state [this {:keys [ws-out] :as state}]
-      (om/build main-view app {:init-state state}))))
+      (om/build tweet-list app {:init-state state}))))
 
+
+;; --- ROOTS ---
 
 (om/root
  tweets-view
  app-state
- {:target (. js/document (getElementById "main-container"))})
+ {:target (. js/document (getElementById "side-container"))})
+
+(om/root
+ #(om/component (navbar %))
+ app-state
+ {:target (. js/document (getElementById "main-navbar"))})

@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store get-tweet-count]]
+            [ceres.curator :refer [store get-tweet-count export-edn]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -29,8 +29,9 @@
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
 
-(defn extract-tweet-data [tweet]
+(defn extract-tweet-data
   "Prepares data for client"
+  [tweet]
   {:timestamp (:created_at tweet)
    :author (-> tweet :user :screen_name)
    :text (:text tweet)
@@ -71,15 +72,17 @@
      :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]}}))
 
 
-(defn dispatch [{:keys [topic data]}]
+(defn dispatch
   "Dispatch incoming websocket-requests"
+  [{:keys [topic data]}]
   (case topic
     :greeting {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
                :tweet-count (get-tweet-count)}))
 
 
-(defn tweet-handler [request]
+(defn tweet-handler
   "Handle incoming tweets"
+  [request]
   (let [out-chan (chan)]
     (with-channel request channel
       (swap! server-state update-in [:twitter :out-chans] conj out-chan)
@@ -101,6 +104,7 @@
 (defroutes all-routes
   (resources "/")
   (GET "/tweets/ws" [] tweet-handler)
+  (GET "tweets/export" [] (export-edn))
   (GET "/*" [] (if (= (:build @server-state) "prod")
                  (static-page)
                  (io/resource "public/index.html"))))

@@ -26,6 +26,7 @@
                  [figwheel "0.1.3-SNAPSHOT"]
                  [com.facebook/react "0.9.0.2"]
                  [om "0.6.4"]
+                 [net.drib/strokes "0.5.1"]
 
                  [com.cemerick/piggieback "0.1.3"]
                  [weasel "0.2.0"]

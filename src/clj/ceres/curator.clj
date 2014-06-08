@@ -4,9 +4,9 @@
             [monger.operators :refer :all]
             [monger.conversion :refer [from-db-object]]
             [monger.joda-time]
-            [clojure.string :refer [split]]
+            [clojure.string :refer [split join]]
             [net.cgrand.enlive-html :as enlive]
-            [clojure.data.json :as djson]
+            [clojure.data.json :as json]
             [clj-time.format :as f]
             [taoensso.timbre :as timbre]
             [clj-time.core :as t])
@@ -78,9 +78,16 @@
 (defn read-data
   "Reads in json data from given path and stores it"
   [path]
-  (doall (map #(let [data (djson/read-str % :key-fn keyword)]
+  (doall (map #(let [data (json/read-str % :key-fn keyword)]
                  (println "Importing " (:id data))
                  (store data)) (split (slurp path) #"\n"))))
+
+
+(defn export-edn []
+  (->> (mc/find (:db @mongo-state) "tweets")
+       seq
+       (map #(str (from-db-object % true)))
+       (join "\n")))
 
 
 (defn get-retweets
@@ -123,10 +130,12 @@
        (map #(from-db-object % true))))
 
 
-(defn get-recent-tweets [page]
+(defn get-recent-tweets
+  "Retrieve the last 25*n tweets"
+  [n]
   (->> (mc/find (:db @mongo-state) "tweets")
        seq
-       (take-last (+ (* page 25) 100))
+       (take-last (+ (* n 25) 100))
        (take 25)
        (mapv #(from-db-object % true))))
 
@@ -136,11 +145,41 @@
 (defn get-tweet-count []
   (mc/count (:db @mongo-state) "tweets"))
 
+(defn get-tweets-from-date [month day]
+  (->> (mc/find
+        (:db @mongo-state)
+        "tweets"
+        {:created_at
+         {$gt (t/date-time 2014 month day)
+          $lte (t/date-time 2014 month (inc day))}})
+       seq
+       (pmap #(from-db-object % true))))
+
+(defn get-hashtag-frequencies [coll]
+  (->> coll
+       (map #(from-db-object % true))
+       (map #(map (fn [hashtag] (hashtag :text)) (-> % :entities :hashtags)))
+       flatten
+       frequencies))
+
+
 (comment
 
-  (->> (mc/find (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 05 14)  $lte (t/date-time 2014 05 15)}})
+  (->> (mc/find (:db @mongo-state) "tweets")
        seq
-       first)
+       (map #(from-db-object % true))
+       (map #(map (fn [hashtag] (hashtag :text)) (-> % :entities :hashtags)))
+       flatten
+       frequencies
+       (sort-by second >)
+       take 10)
+
+  (count (get-tweets-from-date 05 15))
+
+  (->> (mc/find (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 05 14)  $lte (t/date-time 2014 05 15)}})
+      (map #(from-db-object % true))
+      get-hashtag-frequencies
+      (sort-by second >))
 
   ;; TODO update on server
   (time
