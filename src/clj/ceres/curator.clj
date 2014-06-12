@@ -163,6 +163,8 @@
        frequencies))
 
 
+
+
 (comment
 
   (->> (mc/find (:db @mongo-state) "tweets")
@@ -189,5 +191,7 @@
       "tweets"
       (:_id x)
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
+
+  (get-news-frequencies)
 
   )

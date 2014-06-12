@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store get-tweet-count export-edn]]
+            [ceres.curator :refer [store get-tweet-count export-edn get-news-frequencies]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -59,7 +59,7 @@
                    (store tweet)
                    (let [data (extract-tweet-data tweet)]
                      (doall
-                      (map #(put! % data) (-> @server-state :twitter :out-chans))))
+                      (map #(put! % {:topic :new-tweet :data data}) (-> @server-state :twitter :out-chans))))
                    (swap!
                     server-state
                     update-in
@@ -76,8 +76,10 @@
   "Dispatch incoming websocket-requests"
   [{:keys [topic data]}]
   (case topic
-    :greeting {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
-               :tweet-count (get-tweet-count)}))
+    :news-frequencies {:topic :news-frequencies :data (get-news-frequencies)}
+    :greeting {:topic :new-tweet
+               :data {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
+                                  :tweet-count (get-tweet-count)}}))
 
 
 (defn tweet-handler
