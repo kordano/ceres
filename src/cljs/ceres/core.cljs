@@ -159,7 +159,7 @@
       .-scale
       (.ordinal)
       (.domain (vec (range (count data))))
-      (.rangeRoundBands [0 width] 0.2)))
+      (.rangeRoundBands [0 width] 0.3)))
 
 ; y is a fn: index ↦ y
 (def y
@@ -198,5 +198,3 @@
       (.attr {:height  #(y %)
               :width (.rangeBand x)})))
 ;; --- D3 END ---
-
-(.log js/console "is function" (fn? x))
