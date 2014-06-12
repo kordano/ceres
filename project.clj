@@ -19,6 +19,7 @@
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
 
+                 [net.drib/strokes "0.5.1"]
                  [gezwitscher "0.1.1-SNAPSHOT"]
                  [com.novemberain/monger "2.0.0-rc1"]
                  [incanter "1.5.5"]
