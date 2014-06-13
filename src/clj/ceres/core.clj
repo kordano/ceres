@@ -26,6 +26,7 @@
   [:#react-js] (set-attr "src" "static/react/react-0.9.0.min.js")
   [:#jquery-js] (set-attr "src" "static/jquery/jquery-1.11.0.min.js")
   [:#bootstrap-js] (set-attr "src" "static/bootstrap/bootstrap-3.1.1-dist/js/bootstrap.min.js")
+  [:d3-js] (set-attr "src" "static/d3/d3.min.js")
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
 
