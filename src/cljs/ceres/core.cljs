@@ -37,7 +37,7 @@
     :news-frequencies nil
     :tweet-count 0}))
 
-(fw/watch-and-reload
+#_(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
@@ -149,19 +149,17 @@
 ;; --- D3 ---
 (def data [78 680 345 376 351])
 
-(def margin {:top 50 :right 10 :bottom 50 :left 10})
-(def width (- 800 (margin :left) (margin :right)))
+(def margin {:top 50 :right 50 :bottom 50 :left 50})
+(def width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right)))
 (def height (- 500  (margin :top) (margin :bottom)))
 
-; x is a fn: data ↦ width
 (def x
   (-> d3
       .-scale
       (.ordinal)
       (.domain (vec (range (count data))))
-      (.rangeRoundBands [0 width] 0.3)))
+      (.rangeRoundBands [0 width] 0.5)))
 
-; y is a fn: index ↦ y
 (def y
   (-> d3
       .-scale
@@ -180,7 +178,6 @@
       (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
 
 
-; Data ↦ Element
 (def bar2
   (-> svg2
       (.selectAll "g.bar")
@@ -193,8 +190,20 @@
 
 
 (def draw-bars
-  (-> bar2
-      (.append "rect")
-      (.attr {:height  #(y %)
-              :width (.rangeBand x)})))
+  (do
+    (-> bar2
+        (.append "rect")
+        (.attr {:height  #(y %)
+                :width (.rangeBand x)}))
+    (-> bar2
+    (.append "text")
+    (.attr {:x (/ (.rangeBand x) 2)
+            :y y
+            :dy "-0.35em"
+            :text-anchor "middle"})
+    (.style "fill" "white")
+    (.text identity))))
+
+
+
 ;; --- D3 END ---
