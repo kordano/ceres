@@ -47,7 +47,7 @@
   (-> d3
       .-scale
       (.ordinal)
-      (.domain (vec (range (count data))))
+      (.domain (vec (keys data)))
       (.rangeRoundBands [0 width] 0.5)))
 
 
@@ -55,53 +55,76 @@
   (-> d3
       .-scale
       (.linear)
-      (.domain [(apply max data) 0])
+      (.domain [0 (apply max data)])
       (.range [height 0])))
 
 
-(defn create-svg [margin width height]
+(defn create-x-axis [x]
   (-> d3
-      (.select "#tweets-count")
+      .-svg
+      (.axis)
+      (.scale x)
+      (.orient "bottom")))
+
+(defn create-y-axis [y]
+  (-> d3
+      .-svg
+      (.axis)
+      (.scale y)
+      (.orient "left")))
+
+
+(defn create-svg [target margin width height]
+  (-> d3
+      (.select target)
       (.append "svg")
       (.attr {:width  (+ width (margin :left) (margin :right))
-              :height (+ height (margin :top) (margin :bottom))})
+              :height (+ height (margin :top) (margin :bottom))
+              :id "tweet-count-chart"})
       (.append "g")
       (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
 
 
-(defn create-bars [data height width margin]
-  (let [svg (create-svg margin width height)
+(defn create-bars [target data text height width margin]
+  (let [svg (create-svg target margin width height)
         x1 (x data width)
-        y1 (y data height)]
-    (-> svg
-        (.selectAll "g.bar")
-        (.data data)
-        (.enter)
-        (.append "g")
-        (.attr (clj->js {:class "bar"
-                         :transform #(str "translate(" (x1 %2) "," (- height  (y1 (data %2))) ")" )}))
-        (.style {:fill "steelblue"}))))
+        y1 (y (vals data) height)
+        x-axis (create-x-axis x1)
+        y-axis (create-y-axis y1)]
+    (do
+      (-> svg
+          (.append "g")
+          (.attr {:class "x axis"
+                  :transform (str "translate(0," height ")")})
+          (.call x-axis))
+      (-> svg
+          (.append "g")
+          (.attr {:class "y axis"})
+          (.call y-axis))
+      (-> svg
+          (.selectAll "g.bar")
+          (.data data)
+          (.enter)
+          (.append "g")
+          (.attr (clj->js {:class "bar"
+                           :transform #(str "translate(" (x1 (key %1)) ",0)" )}))
+          (.style {:fill "steelblue"})))))
 
 
-(defn draw-bars [data height width margin]
-  (let [bars (create-bars data height width margin)
+(defn draw-bars [target data text height width margin]
+  (let [bars (create-bars target data text height width margin)
         x1 (x data width)
-        y1 (y data height)]
+        y1 (y (vals data) height)]
     (do
       (-> bars
           (.append "rect")
-          (.attr {:height  #(y1 %)
-                  :width (.rangeBand x1)}))
-      (-> bars
-          (.append "text")
-          (.attr {:x (/ (.rangeBand x1) 2)
-                  :y y1
-                  :dy "-0.35em"
-                  :text-anchor "middle"})
-          (.style "fill" "white")
-          (.text identity)))))
+          (.attr {:height  #(- height  (y1 (val %1)))
+                  :y #(y1 (val %1 ))
+                  :width (.rangeBand x1)})))))
 
 ;; --- D3 end ---
+
+
 (defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
   [tweet owner]
   {[:.tweet-text] (content (:text tweet))
@@ -125,14 +148,8 @@
 
 
 (deftemplate stat-screen "templates/stats.html" [app]
-  {[:#selected-stat] (content "Tweets Count")
-   [:#tweets-count] (listen
-                     :on-mount
-                     #(let [data [23 34 99 34 11]
-                            margin {:top 50 :right 50 :bottom 50 :left 50}
-                            width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right))
-                            height (- 500  (margin :top) (margin :bottom))]
-                        (draw-bars data height width margin)))})
+  {[:#selected-stat] (content "Tweets Count")})
+
 
 
 (deftemplate tweet-list "templates/tweet-list.html" [data owner]
@@ -184,10 +201,19 @@
                          (inc tweet-count)))))
 
                   :news-frequencies
-                  (om/transact!
-                   app
-                   :news-frequencies
-                   (fn [old] data)))
+                  (do
+                    (om/transact!
+                     app
+                     :news-frequencies
+                     (fn [old] data))
+                    (let [freqs data
+                          text (mapv first data)
+                          margin {:top 50 :right 50 :bottom 50 :left 50}
+                          width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right))
+                          height (- 500  (margin :top) (margin :bottom))]
+                      (if (empty? freqs)
+                        nil
+                        (draw-bars "#tweets-count" freqs text height width margin)))))
                 (recur))))))
 
     om/IRenderState
