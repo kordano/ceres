@@ -37,11 +37,71 @@
     :news-frequencies nil
     :tweet-count 0}))
 
-#_(fw/watch-and-reload
+(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
 
+;; --- D3 ---
+(defn x [data width]
+  (-> d3
+      .-scale
+      (.ordinal)
+      (.domain (vec (range (count data))))
+      (.rangeRoundBands [0 width] 0.5)))
+
+
+(defn y [data height]
+  (-> d3
+      .-scale
+      (.linear)
+      (.domain [(apply max data) 0])
+      (.range [height 0])))
+
+
+(defn create-svg [margin width height]
+  (-> d3
+      (.select "#tweets-count")
+      (.append "svg")
+      (.attr {:width  (+ width (margin :left) (margin :right))
+              :height (+ height (margin :top) (margin :bottom))})
+      (.append "g")
+      (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
+
+
+(defn create-bars [data height width margin]
+  (let [svg (create-svg margin width height)
+        x1 (x data width)
+        y1 (y data height)]
+    (-> svg
+        (.selectAll "g.bar")
+        (.data data)
+        (.enter)
+        (.append "g")
+        (.attr (clj->js {:class "bar"
+                         :transform #(str "translate(" (x1 %2) "," (- height  (y1 (data %2))) ")" )}))
+        (.style {:fill "steelblue"}))))
+
+
+(defn draw-bars [data height width margin]
+  (let [bars (create-bars data height width margin)
+        x1 (x data width)
+        y1 (y data height)]
+    (do
+      (-> bars
+          (.append "rect")
+          (.attr {:height  #(y1 %)
+                  :width (.rangeBand x1)}))
+      (-> bars
+          (.append "text")
+          (.attr {:x (/ (.rangeBand x1) 2)
+                  :y y1
+                  :dy "-0.35em"
+                  :text-anchor "middle"})
+          (.style "fill" "white")
+          (.text identity)))))
+
+;; --- D3 end ---
 (defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
   [tweet owner]
   {[:.tweet-text] (content (:text tweet))
@@ -65,13 +125,19 @@
 
 
 (deftemplate stat-screen "templates/stats.html" [app]
-  {[:#selected-stat] (content "Tweets Count")})
+  {[:#selected-stat] (content "Tweets Count")
+   [:#tweets-count] (listen
+                     :on-mount
+                     #(let [data [23 34 99 34 11]
+                            margin {:top 50 :right 50 :bottom 50 :left 50}
+                            width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right))
+                            height (- 500  (margin :top) (margin :bottom))]
+                        (draw-bars data height width margin)))})
 
 
 (deftemplate tweet-list "templates/tweet-list.html" [data owner]
   {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
    [:#tweet-overall-count] (content (:tweet-count data))})
-
 
 
 (defn tweets-view
@@ -145,65 +211,3 @@
  #(om/component (stat-screen %))
  app-state
  {:target (. js/document (getElementById "central-container"))})
-
-;; --- D3 ---
-(def data [78 680 345 376 351])
-
-(def margin {:top 50 :right 50 :bottom 50 :left 50})
-(def width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right)))
-(def height (- 500  (margin :top) (margin :bottom)))
-
-(def x
-  (-> d3
-      .-scale
-      (.ordinal)
-      (.domain (vec (range (count data))))
-      (.rangeRoundBands [0 width] 0.5)))
-
-(def y
-  (-> d3
-      .-scale
-      (.linear)
-      (.domain [(apply max data) 0])
-      (.range [height 0])))
-
-
-(def svg2
-  (-> d3
-      (.select "#tweets-count")
-      (.append "svg")
-      (.attr {:width  (+ width (margin :left) (margin :right))
-              :height (+ height (margin :top) (margin :bottom))})
-      (.append "g")
-      (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
-
-
-(def bar2
-  (-> svg2
-      (.selectAll "g.bar")
-      (.data data)
-      (.enter)
-      (.append "g")
-      (.attr (clj->js {:class "bar"
-                       :transform #(str "translate(" (x %2) "," (- height  (y (data %2))) ")" )}))
-      (.style {:fill "steelblue"})))
-
-
-(def draw-bars
-  (do
-    (-> bar2
-        (.append "rect")
-        (.attr {:height  #(y %)
-                :width (.rangeBand x)}))
-    (-> bar2
-    (.append "text")
-    (.attr {:x (/ (.rangeBand x) 2)
-            :y y
-            :dy "-0.35em"
-            :text-anchor "middle"})
-    (.style "fill" "white")
-    (.text identity))))
-
-
-
-;; --- D3 END ---
