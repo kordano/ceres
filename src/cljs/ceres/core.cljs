@@ -37,7 +37,7 @@
     :news-frequencies nil
     :tweet-count 0}))
 
-(fw/watch-and-reload
+#_(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
