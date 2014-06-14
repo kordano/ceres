@@ -175,30 +175,6 @@
 
 (comment
 
-  (get-news-diffusion)
-
-
-  (->> (mc/count (:db @mongo-state) "tweets" {$or [{"entities.user_mentions.screen_name" "FAZ_NET"}
-                                                   {"retweeted_status.user.screen_name" "FAZ_NET"}
-                                                   {"in_reply_to_screen_name" "FAZ_NET"}]}))
-
-
-  (->> (mc/find (:db @mongo-state) "tweets")
-       seq
-       (map #(from-db-object % true))
-       (map #(map (fn [hashtag] (hashtag :text)) (-> % :entities :hashtags)))
-       flatten
-       frequencies
-       (sort-by second >)
-       take 10)
-
-  (count (get-tweets-from-date 05 15))
-
-  (->> (mc/find (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 05 14)  $lte (t/date-time 2014 05 15)}})
-      (map #(from-db-object % true))
-      get-hashtag-frequencies
-      (sort-by second >))
-
   ;; TODO update on server
   (time
    (doseq [x (monger.collection/find-maps (:db @mongo-state) "tweets")]
@@ -208,6 +184,4 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
-  (get-news-frequencies)
-
-  )
+)
