@@ -46,7 +46,9 @@
 
 ;; --- D3 ---
 
-(defn x [data width]
+(defn x
+  "Compute ordinal x component"
+  [data width]
   (-> d3
       .-scale
       (.ordinal)
@@ -54,7 +56,9 @@
       (.rangeRoundBands [0 width] 0.5)))
 
 
-(defn y [data height]
+(defn y
+  "Compute linear y component"
+  [data height]
   (-> d3
       .-scale
       (.linear)
@@ -89,7 +93,9 @@
       (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
 
 
-(defn create-bars [target data height width margin]
+(defn create-bars
+  "Create histogram bars"
+  [target data height width margin]
   (let [svg (create-svg target margin width height)
         x1 (x data width)
         y1 (y data height)
@@ -133,9 +139,9 @@
                   :text-anchor "middle"})
           (.style "fill" "white")
           (.text (fn [[k v] i] v))))))
-
 ;; --- D3 end ---
 
+;; --- tweet-list templates ---
 
 (defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
   [tweet owner]
@@ -156,6 +162,13 @@
                    (content ""))})
 
 
+(deftemplate tweet-list "templates/tweet-list.html" [data owner]
+  {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
+   [:#tweet-overall-count] (content (:tweet-count data))})
+
+;; --- tweet-list templates end ---
+
+
 (deftemplate navbar "templates/navbar.html" [app]
   {[:#ceres-brand] (content "Collector")
    [:#tweet-list-link] (listen :on-click #(.log js/console "tweet list"))
@@ -163,12 +176,7 @@
 
 
 (deftemplate stat-screen "templates/stats.html" [app]
-  {[:#selected-stat] (content "Tweets Count")})
-
-
-(deftemplate tweet-list "templates/tweet-list.html" [data owner]
-  {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
-   [:#tweet-overall-count] (content (:tweet-count data))})
+  {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))})
 
 
 (defn tweets-view
@@ -220,10 +228,10 @@
                      app
                      :news-frequencies
                      (fn [old] data))
-                    (let [margin {:top 50 :right 50 :bottom 50 :left 50}
-                          width (- (.-clientWidth (. js/document (getElementById "central-container"))) (margin :left) (margin :right))
+                    (let [margin {:top 50 :right 60 :bottom 50 :left 1}
+                          width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
                           height (- 500  (margin :top) (margin :bottom))]
-                      (draw-bars "#charts-container" data height width margin))))
+                      (draw-bars "#tweets-count-container" data height width margin))))
                 (recur))))))
 
     om/IRenderState

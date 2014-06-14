@@ -9,14 +9,23 @@
 
     <!-- page header -->
     <div class="page-header">
-      <h3>Statistics
-        <small id="selected-stat">SELECTED</small>
-      </h3>
+      <h3>Statistics</h3>
     </div>
     <!-- page header -->
 
+    <!-- chart selection -->
+    <ul class="nav nav-pills">
+      <li class="active chart-selector"><a href="#tweets-count-container"  data-toggle="pill" id="tweets-count">Tweets Count</a></li>
+      <li class="chart-selector"><a href="#diffusion-container" data-toggle="pill" id="diffusion">Diffusion</a></li>
+      <li class="chart-selector" ><a href="#hashtags-container" data-toggle="pill" id="hashtags">Hashtags</a></li>
+    </ul>
+    <!-- chart selection end -->
+
     <!-- charts -->
-    <div id="charts-container" class="container">
+    <div class="tab-content">
+      <div class="tab-pane active" id="tweets-count-container"></div>
+      <div class="tab-pane" id="diffusion-container">Diffusion</div>
+      <div class="tab-pane" id="hashtags-container">Hashtag</div>
     </div>
     <!-- charts end -->
     <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
