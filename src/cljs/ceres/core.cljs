@@ -37,6 +37,7 @@
   (atom
    {:tweets []
     :news-frequencies nil
+    :news-diffusion nil
     :tweet-count 0}))
 
 #_(fw/watch-and-reload
@@ -81,16 +82,29 @@
       (.scale y)
       (.orient "left")))
 
+(defn create-remove-svg [target]
+  (-> d3
+      (.select (str "#" target))
+      (.select "svg")
+      (.remove)))
 
 (defn create-svg [target margin width height]
-  (-> d3
-      (.select target)
-      (.append "svg")
-      (.attr {:width  (+ width (margin :left) )
-              :height (+ height (margin :top) (margin :bottom))
-              :id "tweets-barchart"})
-      (.append "g")
-      (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
+  (let [target-svg (-> d3
+                       (.select (str "#" target))
+                       (.select "svg"))]
+    (do
+      (if (nil? target-svg)
+        (.log js/console "empty")
+        (-> target-svg
+            (.remove)))
+      (-> d3
+          (.select (str "#" target))
+          (.append "svg")
+          (.attr {:width  (+ width (margin :left) )
+                  :height (+ height (margin :top) (margin :bottom))
+                  :id (str target "-chart")})
+          (.append "g")
+          (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))))
 
 
 (defn create-bars
@@ -128,8 +142,8 @@
                   :y height
                   :width (.rangeBand x1)})
           (.transition)
-          (.delay 500)
-          (.duration 1300)
+          (.delay 200)
+          (.duration 500)
           (.attr {:y (fn [[k v] i] (- height  (y1 v)))
                   :height (fn [[k v] i] (y1 v))}))
       (-> bars
@@ -176,7 +190,18 @@
 
 
 (deftemplate stat-screen "templates/stats.html" [app]
-  {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))})
+  {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
+   [:#diffusion] (listen :on-click #(let [data (:news-diffusion @app)
+                                          margin {:top 50 :right 60 :bottom 50 :left 1}
+                                          width (- (.-clientWidth (. js/document (getElementById "diffusion-container"))) (margin :left) (margin :right))
+                                          height (- 500  (margin :top) (margin :bottom))]
+                                      (draw-bars "diffusion-container" data height width margin)))
+
+   [:#tweets-count] (listen :on-click #(let [data (:news-frequencies @app)
+                                           margin {:top 50 :right 60 :bottom 50 :left 1}
+                                           width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
+                                          height (- 500  (margin :top) (margin :bottom))]
+                                         (draw-bars "tweets-count-container" data height width margin)))})
 
 
 (defn tweets-view
@@ -202,6 +227,7 @@
             (om/set-state! owner :ws-out (:out connection))
             (>! (:in connection) {:topic :greeting :data ""})
             (>! (:in connection) {:topic :news-frequencies :data ""})
+            (>! (:in connection) {:topic :news-diffusion :data ""})
             (loop []
               (let [{:keys [topic data] :as package} (<! (:out connection))]
                 (case topic
@@ -222,6 +248,13 @@
                          (:tweet-count data)
                          (inc tweet-count)))))
 
+                  :news-diffusion
+                  (om/transact!
+                   app
+                   :news-diffusion
+                   (fn [old] data))
+
+
                   :news-frequencies
                   (do
                     (om/transact!
@@ -231,7 +264,7 @@
                     (let [margin {:top 50 :right 60 :bottom 50 :left 1}
                           width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
                           height (- 500  (margin :top) (margin :bottom))]
-                      (draw-bars "#tweets-count-container" data height width margin))))
+                      (draw-bars "tweets-count-container" data height width margin))))
                 (recur))))))
 
     om/IRenderState

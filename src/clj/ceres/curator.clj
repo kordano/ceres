@@ -162,10 +162,26 @@
        flatten
        frequencies))
 
+(defn compute-diffusion [user]
+  (->> (mc/count (:db @mongo-state) "tweets" {$or [{"entities.user_mentions.screen_name" user}
+                                                   {"retweeted_status.user.screen_name" user}
+                                                   {"in_reply_to_screen_name" user}]})))
+
+
+(defn get-news-diffusion []
+  (mapv #(vec [% (compute-diffusion %)]) (:news-accounts @mongo-state)))
 
 
 
 (comment
+
+  (get-news-diffusion)
+
+
+  (->> (mc/count (:db @mongo-state) "tweets" {$or [{"entities.user_mentions.screen_name" "FAZ_NET"}
+                                                   {"retweeted_status.user.screen_name" "FAZ_NET"}
+                                                   {"in_reply_to_screen_name" "FAZ_NET"}]}))
+
 
   (->> (mc/find (:db @mongo-state) "tweets")
        seq
