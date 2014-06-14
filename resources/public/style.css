@@ -12,3 +12,8 @@ tbody {
   stroke: #000;
   shape-rendering: crispEdges;
 }
+
+.tweet-news-item {
+    border-left: 5px solid steelblue;
+    border-right: 5px solid steelblue;
+}

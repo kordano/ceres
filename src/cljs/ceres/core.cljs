@@ -1,7 +1,7 @@
 (ns ceres.core
   (:require [figwheel.client :as fw :include-macros true]
             [weasel.repl :as ws-repl]
-            [kioo.om :refer [content set-attr do-> substitute listen prepend append html remove-class]]
+            [kioo.om :refer [content set-attr do-> substitute listen prepend append html add-class remove-class]]
             [kioo.core :refer [handle-wrapper]]
             [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
@@ -18,6 +18,8 @@
 (def ssl? (= (.getScheme uri) "https"))
 
 (println "Greetings commander")
+
+(def news-sources #{"FAZ_NET" "SZ" "dpa" "SPIEGELONLINE" "tagesschau"})
 
 (strokes/bootstrap)
 
@@ -43,6 +45,7 @@
 
 
 ;; --- D3 ---
+
 (defn x [data width]
   (-> d3
       .-scale
@@ -55,8 +58,8 @@
   (-> d3
       .-scale
       (.linear)
-      (.domain [0 (apply max data)])
-      (.range [height 0])))
+      (.domain [0 (apply max (vals data))])
+      (.range [0 height])))
 
 
 (defn create-x-axis [x]
@@ -65,6 +68,7 @@
       (.axis)
       (.scale x)
       (.orient "bottom")))
+
 
 (defn create-y-axis [y]
   (-> d3
@@ -78,17 +82,17 @@
   (-> d3
       (.select target)
       (.append "svg")
-      (.attr {:width  (+ width (margin :left) (margin :right))
+      (.attr {:width  (+ width (margin :left) )
               :height (+ height (margin :top) (margin :bottom))
-              :id "tweet-count-chart"})
+              :id "tweets-barchart"})
       (.append "g")
       (.attr {:transform (str "translate(" (margin :left) "," (margin :top) ")")})))
 
 
-(defn create-bars [target data text height width margin]
+(defn create-bars [target data height width margin]
   (let [svg (create-svg target margin width height)
         x1 (x data width)
-        y1 (y (vals data) height)
+        y1 (y data height)
         x-axis (create-x-axis x1)
         y-axis (create-y-axis y1)]
     (do
@@ -98,36 +102,47 @@
                   :transform (str "translate(0," height ")")})
           (.call x-axis))
       (-> svg
-          (.append "g")
-          (.attr {:class "y axis"})
-          (.call y-axis))
-      (-> svg
           (.selectAll "g.bar")
           (.data data)
           (.enter)
           (.append "g")
           (.attr (clj->js {:class "bar"
-                           :transform #(str "translate(" (x1 (key %1)) ",0)" )}))
+                           :transform (fn [[k v] i] (str "translate(" (x1 k) ",0)"))}))
           (.style {:fill "steelblue"})))))
 
 
-(defn draw-bars [target data text height width margin]
-  (let [bars (create-bars target data text height width margin)
+(defn draw-bars [target data height width margin]
+  (let [bars (create-bars target data height width margin)
         x1 (x data width)
-        y1 (y (vals data) height)]
+        y1 (y data height)]
     (do
       (-> bars
           (.append "rect")
-          (.attr {:height  #(- height  (y1 (val %1)))
-                  :y #(y1 (val %1 ))
-                  :width (.rangeBand x1)})))))
+          (.attr {:height 0
+                  :y height
+                  :width (.rangeBand x1)})
+          (.transition)
+          (.delay 500)
+          (.duration 1300)
+          (.attr {:y (fn [[k v] i] (- height  (y1 v)))
+                  :height (fn [[k v] i] (y1 v))}))
+      (-> bars
+          (.append "text")
+          (.attr {:x (/ (.rangeBand x1) 2)
+                  :y (fn [[k v] i] (- height (- (y1 v) 15)))
+                  :text-anchor "middle"})
+          (.style "fill" "white")
+          (.text (fn [[k v] i] v))))))
 
 ;; --- D3 end ---
 
 
 (defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
   [tweet owner]
-  {[:.tweet-text] (content (:text tweet))
+  {[:.tweet-item] (if (news-sources (:author tweet))
+                    (add-class "tweet-news-item")
+                    (remove-class "fade"))
+   [:.tweet-text] (content (:text tweet))
    [:.tweet-author] (content (str "@" (:author tweet)))
    [:.tweet-timestamp] (content (:timestamp tweet))
    [:.tweet-reaction] (content
@@ -149,7 +164,6 @@
 
 (deftemplate stat-screen "templates/stats.html" [app]
   {[:#selected-stat] (content "Tweets Count")})
-
 
 
 (deftemplate tweet-list "templates/tweet-list.html" [data owner]
@@ -206,14 +220,10 @@
                      app
                      :news-frequencies
                      (fn [old] data))
-                    (let [freqs data
-                          text (mapv first data)
-                          margin {:top 50 :right 50 :bottom 50 :left 50}
-                          width (- (.-clientWidth (. js/document (getElementById "tweets-count"))) (margin :left) (margin :right))
+                    (let [margin {:top 50 :right 50 :bottom 50 :left 50}
+                          width (- (.-clientWidth (. js/document (getElementById "central-container"))) (margin :left) (margin :right))
                           height (- 500  (margin :top) (margin :bottom))]
-                      (if (empty? freqs)
-                        nil
-                        (draw-bars "#tweets-count" freqs text height width margin)))))
+                      (draw-bars "#charts-container" data height width margin))))
                 (recur))))))
 
     om/IRenderState
