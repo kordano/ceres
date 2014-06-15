@@ -82,13 +82,17 @@
       (.scale y)
       (.orient "left")))
 
-(defn create-remove-svg [target]
+(defn create-remove-svg
+  "Create remove function"
+  [target]
   (-> d3
       (.select (str "#" target))
       (.select "svg")
       (.remove)))
 
-(defn create-svg [target margin width height]
+(defn create-svg
+  "Create svg function"
+  [target margin width height]
   (let [target-svg (-> d3
                        (.select (str "#" target))
                        (.select "svg"))]
@@ -131,7 +135,9 @@
           (.style {:fill "steelblue"})))))
 
 
-(defn draw-bars [target data height width margin]
+(defn draw-bars
+  "Draw the bar charts in given target node with given data"
+  [target data height width margin]
   (let [bars (create-bars target data height width margin)
         x1 (x data width)
         y1 (y data height)]
