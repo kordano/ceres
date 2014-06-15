@@ -45,7 +45,7 @@
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
 
-;; --- D3 ---
+;; --- D3 barchart ---
 
 (defn x
   "Compute ordinal x component"
@@ -159,7 +159,9 @@
                   :text-anchor "middle"})
           (.style "fill" "white")
           (.text (fn [[k v] i] v))))))
-;; --- D3 end ---
+
+;; --- D3 barchart end ---
+
 
 ;; --- tweet-list templates ---
 
@@ -250,7 +252,7 @@
                      app
                      :tweet-count
                      (fn [tweet-count]
-                       (if (:tweet-count data)
+                      (if (:tweet-count data)
                          (:tweet-count data)
                          (inc tweet-count)))))
 
