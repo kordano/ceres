@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store get-tweet-count export-edn get-news-diffusion get-news-frequencies]]
+            [ceres.curator :refer [store get-tweet-count export-edn get-news-diffusion get-news-frequencies get-month-distribution]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -78,10 +78,12 @@
   [{:keys [topic data]}]
   (case topic
     :news-frequencies {:topic :news-frequencies :data (get-news-frequencies)}
+    :time-distribution {:topic :time-distribution :data (mapv get-month-distribution data)}
     :news-diffusion {:topic :news-diffusion :data (get-news-diffusion)}
     :greeting {:topic :new-tweet
                :data {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
                                   :tweet-count (get-tweet-count)}}))
+
 
 (defn tweet-handler
   "Handle incoming tweets"

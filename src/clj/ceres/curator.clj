@@ -1,8 +1,10 @@
 (ns ceres.curator
+  (:refer-clojure :exclude [sort find])
   (:require [monger.core :as mg]
             [monger.collection :as mc]
             [monger.operators :refer :all]
             [monger.conversion :refer [from-db-object]]
+            [monger.query :refer :all]
             [monger.joda-time]
             [clojure.string :refer [split join]]
             [net.cgrand.enlive-html :as enlive]
@@ -22,6 +24,19 @@
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
     :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
 
+(def months
+  [(range 1 32)
+   (range 1 29)
+   (range 1 32)
+   (range 1 31)
+   (range 1 32)
+   (range 1 31)
+   (range 1 32)
+   (range 1 32)
+   (range 1 31)
+   (range 1 32)
+   (range 1 31)
+   (range 1 32)])
 
 (defn- expand-url
   "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
@@ -139,11 +154,14 @@
        (take 25)
        (mapv #(from-db-object % true))))
 
+
 (defn get-news-frequencies []
   (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %})]) (:news-accounts @mongo-state)))
 
+
 (defn get-tweet-count []
   (mc/count (:db @mongo-state) "tweets"))
+
 
 (defn get-tweets-from-date [month day]
   (->> (mc/find
@@ -155,12 +173,14 @@
        seq
        (pmap #(from-db-object % true))))
 
+
 (defn get-hashtag-frequencies [coll]
   (->> coll
        (map #(from-db-object % true))
        (map #(map (fn [hashtag] (hashtag :text)) (-> % :entities :hashtags)))
        flatten
        frequencies))
+
 
 (defn compute-diffusion [user]
   (->> (mc/count (:db @mongo-state) "tweets" {$or [{"entities.user_mentions.screen_name" user}
@@ -172,8 +192,29 @@
   (mapv #(vec [% (compute-diffusion %)]) (:news-accounts @mongo-state)))
 
 
+(defn get-month-distribution [month]
+  (let [day-range (months (dec month))]
+    (vec
+     (pmap
+      (fn [day]
+        (into {} [[:date (str (t/date-time 2014 month day))]
+                  [:count
+                   (mc/count
+                    (:db @mongo-state)
+                    "tweets"
+                    {:created_at
+                     {$gt (t/date-time 2014 month day 0 0 0 0)
+                      $lte (t/date-time 2014 month day 23 59 59 999)}})]]))
+      day-range))))
 
 (comment
+
+  (->> (pmap
+       get-month-distribution
+       [5 6])
+      flatten)
+
+  (get-month-distribution 6)
 
   ;; TODO update on server
   (time
