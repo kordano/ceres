@@ -52,13 +52,13 @@
 
   :cljsbuild
   {:builds
-   {:dev
-    {:source-paths ["src/cljs"]
+   [{:id "local"
+     :source-paths ["src/cljs"]
      :compiler {:output-to "resources/public/js/compiled/main.js"
                 :output-dir "resources/public/js/compiled/out"
                 :optimizations :none
                 :source-map true}}
-    :prod
-    {:source-paths ["src/cljs"]
-     :compiler {:output-to "resources/public/js/main.js"
-                :optimizations :simple}}}})
+    {:id "prod"
+       :source-paths ["src/cljs"]
+       :compiler {:output-to "resources/public/js/main.js"
+                  :optimizations :simple}}]})
