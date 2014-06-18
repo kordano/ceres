@@ -111,7 +111,7 @@
   (resources "/")
   (GET "/tweets/ws" [] tweet-handler)
   (GET "tweets/export" [] (export-edn))
-  (GET "/*" [] (if (= (:build @server-state) "prod")
+  (GET "/*" [] (if (= (:build @server-state) :prod)
                  (static-page)
                  (io/resource "public/index.html"))))
 
@@ -123,6 +123,7 @@
   (run-server (site #'all-routes) {:port (:port @server-state) :join? false})
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
     (start-filter-stream follow track handler credentials)))
+
 
 (comment
 
