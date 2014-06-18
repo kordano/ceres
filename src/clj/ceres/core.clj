@@ -100,11 +100,12 @@
 (defn initialize
   "Initializes the server state using a given config file"
   [state path]
-  (let [config (-> path slurp read-string
-                   (assoc-in [:app :handler] (partial stream-handler state))
-                   (assoc-in [:app :out-chans] [])
-                   (assoc-in [:app :recent-tweets] []))]
-    (reset! state config)))
+  (reset!
+   state
+   (-> path slurp read-string
+       (assoc-in [:app :handler] (partial stream-handler state))
+       (assoc-in [:app :out-chans] [])
+       (assoc-in [:app :recent-tweets] []))))
 
 
 (defroutes all-routes
