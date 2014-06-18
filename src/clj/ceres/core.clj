@@ -46,31 +46,7 @@
               nil)})
 
 
-(def server-state
-  (atom
-   {:build "dev"
-    :twitter
-    {:credentials {:consumer-key (or (System/getenv "TWITTER_API_KEY") "****")
-                   :consumer-secret (or (System/getenv "TWITTER_API_SECRET") "****")
-                   :access-token (or (System/getenv "TWITTER_ACCESS_TOKEN") "****")
-                   :access-token-secret (or (System/getenv "TWITTER_ACCESS_TOKEN_SECRET") "****")}
-     :handler  (fn [tweet]
-                 (do
-                   (info (str "Storing tweet") (:id tweet))
-                   (store tweet)
-                   (let [data (extract-tweet-data tweet)]
-                     (doall
-                      (map #(put! % {:topic :new-tweet :data data}) (-> @server-state :twitter :out-chans))))
-                   (swap!
-                    server-state
-                    update-in
-                    [:twitter :recent-tweets]
-                    (fn [old new] (vec (take 100 (into [new] old))))
-                    tweet)))
-     :recent-tweets []
-     :out-chans []
-     :follow [114508061 18016521 5734902 40227292 2834511]
-     :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]}}))
+(def server-state (atom nil))
 
 
 (defn dispatch
@@ -90,20 +66,45 @@
   [request]
   (let [out-chan (chan)]
     (with-channel request channel
-      (swap! server-state update-in [:twitter :out-chans] conj out-chan)
+      (swap! server-state update-in [:app :out-chans] conj out-chan)
       (go-loop [m (<! out-chan)]
         (when m
           (send! channel (pr-str m))
           (recur (<! out-chan))))
       (on-close channel
                 (fn [status]
-                  (swap! server-state update-in [:twitter :out-chans] (fn [old new] (vec (remove #(= new %) old))) out-chan)
+                  (swap! server-state update-in [:app :out-chans] (fn [old new] (vec (remove #(= new %) old))) out-chan)
                   (close! out-chan)
                   (info "tweet channel closed: " status "!")))
       (on-receive channel
                   (fn [data]
                     (info "tweet channel opened!")
                     (send! channel (str (dispatch (read-string data)))))))))
+
+(defn stream-handler
+  "Reacts to incoming tweets"
+  [state tweet]
+  (do
+    (info (str "Storing tweet") (:id tweet))
+    (store tweet)
+    (let [data (extract-tweet-data tweet)]
+      (doall
+       (map #(put! % {:topic :new-tweet :data data}) (-> @state :app :out-chans))))
+    (swap!
+     state
+     update-in
+     [:app :recent-tweets]
+     (fn [old new] (vec (take 100 (into [new] old))))
+     tweet)))
+
+(defn initialize
+  "Initializes the server state using a given config file"
+  [state path]
+  (let [config (-> path slurp read-string
+                   (assoc-in [:app :handler] (partial stream-handler state))
+                   (assoc-in [:app :out-chans] [])
+                   (assoc-in [:app :recent-tweets] []))]
+    (reset! state config)))
 
 
 (defroutes all-routes
@@ -116,25 +117,28 @@
 
 
 (defn -main [& args]
-  (let [[port build] args]
-    (swap! server-state assoc :build build)
-    (info "Starting twitter collector...")
-    (info (clojure.pprint/pprint @server-state))
-    (run-server (site #'all-routes) {:port (Integer/parseInt port) :join? false})
-    (let [{:keys [follow track handler credentials]} (:twitter @server-state)]
-      (start-filter-stream follow track handler credentials))))
-
+  (initialize server-state (first args))
+  (info "Starting twitter collector...")
+  (info (clojure.pprint/pprint @server-state))
+  (run-server (site #'all-routes) {:port (:port @server-state) :join? false})
+  (let [{:keys [follow track handler credentials]} (:app @server-state)]
+    (start-filter-stream follow track handler credentials)))
 
 (comment
 
+  @server-state
+
+  (initialize server-state "resources/server-config.edn")
+
+
   (def stop-stream
-    (let [{:keys [follow track handler credentials]} (:twitter @server-state)]
+    (let [{:keys [follow track handler credentials]} (:app @server-state)]
       (start-filter-stream follow track handler credentials)))
 
   (stop-stream)
 
-  (def server (run-server (site #'all-routes) {:port 8082 :join? false}))
+  (def server (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
 
   (server)
 
-)
+  )
