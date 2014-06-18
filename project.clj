@@ -57,7 +57,7 @@
                 :output-dir "resources/public/js/compiled/out"
                 :optimizations :none
                 :source-map true}}
-    #_{:id "prod"
+    {:id "prod"
        :source-paths ["src/cljs"]
        :compiler {:output-to "resources/public/js/main.js"
                   :optimizations :simple}}]})
