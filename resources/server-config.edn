@@ -1,0 +1,11 @@
+{:port 8082
+ :build :prod
+ :app
+ {:credentials
+  {:consumer-key ""
+   :consumer-secret ""
+   :access-token ""
+   :access-token-secret ""}
+  :follow [114508061 18016521 5734902 40227292 2834511]
+  :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE"]}
+ }
