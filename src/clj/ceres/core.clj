@@ -57,8 +57,9 @@
     :time-distribution {:topic :time-distribution :data (mapv get-month-distribution data)}
     :news-diffusion {:topic :news-diffusion :data (get-news-diffusion)}
     :greeting {:topic :new-tweet
-               :data {:recent-tweets (mapv extract-tweet-data (-> @server-state :twitter :recent-tweets))
-                                  :tweet-count (get-tweet-count)}}))
+               :data
+               {:recent-tweets (mapv extract-tweet-data (-> @server-state :app :recent-tweets))
+                :tweet-count (get-tweet-count)}}))
 
 
 (defn tweet-handler
@@ -128,10 +129,7 @@
 
 (comment
 
-  @server-state
-
   (initialize server-state "resources/server-config.edn")
-
 
   (def stop-stream
     (let [{:keys [follow track handler credentials]} (:app @server-state)]
