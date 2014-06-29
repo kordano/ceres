@@ -22,7 +22,7 @@
               ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
           (mg/get-db (mg/connect sa opts) "athena"))
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
-    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ"}}))
+    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de"}}))
 
 (def months
   [(range 1 32)
@@ -207,14 +207,29 @@
                       $lte (t/date-time 2014 month day 23 59 59 999)}})]]))
       day-range))))
 
+
+
+
 (comment
 
-  (->> (pmap
-       get-month-distribution
-       [5 6])
-      flatten)
+  (get-hashtag-distribution 6 16)
 
-  (get-month-distribution 6)
+  (->>
+   (mc/find
+    (:db @mongo-state)
+    "tweets"
+    {:created_at
+     {$gt (t/date-time 2014 6 16 0 0 0 0)
+      $lte (t/date-time 2014 6 16 23 59 59 999)}})
+   seq
+   (map #(from-db-object % true))
+   (map (fn [tweet] (map (fn [hashtag] (:text hashtag)) (get-in tweet [:entities :hashtags]))))
+   flatten
+   frequencies
+   (sort-by val >)
+   (take 10))
+
+
 
   ;; TODO update on server
   (time

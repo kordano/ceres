@@ -19,7 +19,7 @@
 
 (println "Greetings commander")
 
-(def news-sources #{"FAZ_NET" "SZ" "dpa" "SPIEGELONLINE" "tagesschau"})
+(def news-sources #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de"})
 
 (strokes/bootstrap)
 
@@ -31,7 +31,7 @@
         :repl-env (weasel.repl.websocket/repl-env
                    :ip "0.0.0.0" :port 17782)))
 
-#_(ws-repl/connect "ws://localhost:17782" :verbose true)
+(ws-repl/connect "ws://localhost:17782" :verbose true)
 
 (def app-state
   (atom
@@ -40,7 +40,7 @@
     :news-diffusion nil
     :tweet-count 0}))
 
-#_(fw/watch-and-reload
+(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
@@ -160,7 +160,41 @@
           (.style "fill" "white")
           (.text (fn [[k v] i] v))))))
 
-;; --- D3 barchart end ---
+
+;; --- D3 line chart ---
+
+(defn line-x [data width]
+  (-> d3
+      .-time
+      (.scale)
+      (.domain (-> d3
+                   (.extent data (fn [d] (:date d)))))
+      (.range [0 width])))
+
+(defn line-y [data height]
+  (-> d3
+      .-scale
+      (.linear)
+      (.domain (-> d3
+                   (.extent data (fn [d] (:count d)))))
+      (.range [height 0])))
+
+(defn line []
+  (-> d3
+      .-svg
+      (.line)
+      (.x (fn [d i] (:date d)))
+      (:y (fn [d i] (:count d)))))
+
+(defn create-lines [target data height width margin]
+  (let [svg (create-svg target margin width height)
+        d-line (line)]
+    (-> svg
+        (.append "path")
+        (.datum data)
+        (.attr {:class "line"
+                :d d-line}))))
+
 
 
 ;; --- tweet-list templates ---
@@ -229,7 +263,7 @@
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
                                ":"
-                               (.getPort uri)
+                               8082 #_(.getPort uri)
                                "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
@@ -296,3 +330,18 @@
  #(om/component (stat-screen %))
  app-state
  {:target (. js/document (getElementById "central-container"))})
+
+
+(comment
+  (go
+    (let [connection (<! (connect!
+                          (str
+                           (if ssl?  "wss://" "ws://")
+                           (.getDomain uri)
+                           ":"
+                           8082 #_(.getPort uri)
+                           "/tweets/ws")))]
+      (>! (:in connection) {:topic :time-distribution :data [5 6]})
+      (println (-> (<! (:out connection)) :data ffirst :date js/Date.))))
+
+  )
