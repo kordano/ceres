@@ -31,7 +31,7 @@
         :repl-env (weasel.repl.websocket/repl-env
                    :ip "0.0.0.0" :port 17782)))
 
-(ws-repl/connect "ws://localhost:17782" :verbose true)
+#_(ws-repl/connect "ws://localhost:17782" :verbose true)
 
 (def app-state
   (atom
@@ -40,7 +40,7 @@
     :news-diffusion nil
     :tweet-count 0}))
 
-(fw/watch-and-reload
+#_(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 

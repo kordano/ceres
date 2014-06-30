@@ -16,7 +16,7 @@
             in (in)
             out (out)
             websocket (goog.net.WebSocket.)]
-        (.log js/console "establishing websocket ...")
+        (.log js/console (str "establishing websocket: " uri))
         (doto websocket
           (events/listen event-type/MESSAGE
                          (fn [m]
