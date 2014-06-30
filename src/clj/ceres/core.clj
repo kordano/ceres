@@ -112,7 +112,7 @@
 (defroutes all-routes
   (resources "/")
   (GET "/tweets/ws" [] tweet-handler)
-  (GET "tweets/export" [] (export-edn))
+  (GET "/tweets/export" [] (export-edn))
   (GET "/*" [] (if (= (:build @server-state) :prod)
                  (static-page)
                  (io/resource "public/index.html"))))
