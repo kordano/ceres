@@ -169,8 +169,9 @@
         (:db @mongo-state)
         "tweets"
         {:created_at
-         {$gt (t/date-time 2014 month day)
-          $lte (t/date-time 2014 month (inc day))}})
+         {$gt (t/date-time 2014 month day 0 0 0 0)
+          $lte (t/date-time 2014 month day 23 59 59 999)}
+         })
        seq
        (pmap #(from-db-object % true))))
 
