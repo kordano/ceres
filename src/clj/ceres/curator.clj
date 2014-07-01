@@ -22,7 +22,7 @@
               ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
           (mg/get-db (mg/connect sa opts) "athena"))
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
-    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de"}}))
+    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focus_de"}}))
 
 (def months
   [(range 1 32)
@@ -156,7 +156,8 @@
 
 
 (defn get-news-frequencies []
-  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %})]) (:news-accounts @mongo-state)))
+  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %
+                                                        :created_at {$gt (t/date-time 2014 7 1)}})]) (:news-accounts @mongo-state)))
 
 
 (defn get-tweet-count []
@@ -183,9 +184,10 @@
 
 
 (defn compute-diffusion [user]
-  (->> (mc/count (:db @mongo-state) "tweets" {$or [{"entities.user_mentions.screen_name" user}
-                                                   {"retweeted_status.user.screen_name" user}
-                                                   {"in_reply_to_screen_name" user}]})))
+  (->> (mc/count (:db @mongo-state) "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
+                                                           {"retweeted_status.user.screen_name" user}
+                                                           {"in_reply_to_screen_name" user}]}
+                                                    {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
 
 (defn get-news-diffusion []
@@ -214,6 +216,8 @@
 
   (get-hashtag-distribution 6 16)
 
+  (compute-diffusion "SZ")
+
   (->>
    (mc/find
     (:db @mongo-state)
@@ -238,6 +242,4 @@
       (:db @mongo-state)
       "tweets"
       (:_id x)
-      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
-
-)
+      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %)))))))
