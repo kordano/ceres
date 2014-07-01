@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store get-tweet-count export-edn get-news-diffusion get-news-frequencies get-month-distribution]]
+            [ceres.curator :refer [store get-tweet-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -108,11 +108,19 @@
        (assoc-in [:app :out-chans] [])
        (assoc-in [:app :recent-tweets] []))))
 
+(defn handle-export [query]
+  (let [[m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
+       (->> (curator/get-tweets-from-date m d)
+           (map str)
+           (clojure.string/join "\n"))))
 
 (defroutes all-routes
   (resources "/")
   (GET "/tweets/ws" [] tweet-handler)
-  (GET "/tweets/export" [] (export-edn))
+
+  (GET "/tweets/export" request (let [query-params (-> request :query-params)]
+                                  (handle-export query-params)))
+
   (GET "/*" [] (if (= (:build @server-state) :prod)
                  (static-page)
                  (io/resource "public/index.html"))))
