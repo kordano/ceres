@@ -14,8 +14,8 @@
             [taoensso.timbre :as timbre]))
 
 (timbre/refer-timbre)
-(timbre/set-config! [:appenders :spit :enabled?] true)
-(timbre/set-config! [:shared-appender-config :spit-filename] "resources/collector.log")
+#_(timbre/set-config! [:appenders :spit :enabled?] true)
+#_(timbre/set-config! [:shared-appender-config :spit-filename] "resources/collector.log")
 
 
 (deftemplate static-page

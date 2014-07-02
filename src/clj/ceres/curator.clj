@@ -77,6 +77,26 @@
       :url url
       :record-id id})))
 
+(defn store-url [record]
+  (let [id (:_id record)
+        record-urls (-> record :entities :urls)
+        urls (if (empty? record-urls)
+               nil
+               (map
+                #(let [expanded-url (expand-url (:expanded_url %))]
+                   (if expanded-url
+                     expanded-url
+                     (:expanded_url %)))
+                record-urls))]
+    (if urls
+      (doall
+       (pmap
+        #(mc/insert-and-return
+         (:db @mongo-state)
+         "urls"
+         {:record-id id
+          :url %})
+        urls)))))
 
 (defn store
   "Stores the given tweet in mongodb"
@@ -86,7 +106,8 @@
         record (mc/insert-and-return (:db @mongo-state) "tweets" (merge doc {:_id oid}))]
     (if ((:news-accounts @mongo-state) (-> record :user :screen_name))
       (store-news record)
-      record)))
+      record)
+    (store-url record)))
 
 
 ;;todo check if id exists in database
@@ -223,11 +244,12 @@
 
 
 
-
 (comment
 
-  (let [ids (mapv :id_str (get-tweets "SPIEGELONLINE"))]
-    (compute-tweet-diffusion (nth ids 11)))
+  (->> (mc/find (:db @mongo-state) "urls")
+       (map #(from-db-object % true))
+       (map :url)
+       frequencies)
 
 
   (->>
