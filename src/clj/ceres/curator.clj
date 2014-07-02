@@ -116,7 +116,7 @@
 (defn get-tweets
   "Fetches all tweets by a given twitter user"
   [user]
-  (->> (mc/find (:db @mongo-state) "tweets" {"user.screen_name" user})
+  (->> (mc/find (:db @mongo-state) "tweets" {:user.screen_name user :created_at {$gt (t/date-time 2014 7 1)}})
        seq
        (map #(from-db-object % true))))
 
@@ -190,6 +190,17 @@
                                                            {"in_reply_to_screen_name" user}]}
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
+(defn compute-tweet-diffusion [tweet-id]
+  (let [neighbor-tweets (->> (mc/find
+                              (:db @mongo-state)
+                              "tweets"
+                              {$and [{$or [{"retweeted_status.id_str" tweet-id}
+                                           {"in_reply_to_status_id_str" tweet-id}]}
+                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})
+                             (pmap #(from-db-object % true)))
+        neightbar-ids (pmap :id_str neighbor-tweets)]
+    (merge neighbor-tweets (pmap #(compute-tweet-diffusion %) neightbar-ids))))
+
 
 (defn get-news-diffusion []
   (mapv #(vec [% (compute-diffusion %)]) (:news-accounts @mongo-state)))
@@ -215,10 +226,9 @@
 
 (comment
 
-  (get-hashtag-distribution 6 16)
+  (let [ids (mapv :id_str (get-tweets "SPIEGELONLINE"))]
+    (compute-tweet-diffusion (nth ids 11)))
 
-
-  (compute-diffusion "SZ")
 
   (->>
    (mc/find
@@ -244,4 +254,8 @@
       (:db @mongo-state)
       "tweets"
       (:_id x)
-      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %)))))))
+      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
+
+
+
+)
