@@ -31,7 +31,7 @@
         :repl-env (weasel.repl.websocket/repl-env
                    :ip "0.0.0.0" :port 17782)))
 
-#_(ws-repl/connect "ws://localhost:17782" :verbose true)
+(ws-repl/connect "ws://localhost:17782" :verbose true)
 
 (def app-state
   (atom
@@ -40,7 +40,7 @@
     :news-diffusion nil
     :tweet-count 0}))
 
-#_(fw/watch-and-reload
+(fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
 
@@ -59,7 +59,8 @@
 
 (defn y
   "Compute linear y component"
-  [data height]
+  [data heigh
+   t]
   (-> d3
       .-scale
       (.linear)
@@ -263,7 +264,7 @@
                                (if ssl?  "wss://" "ws://")
                                (.getDomain uri)
                                (when (= (.getDomain uri) "localhost")
-                                 ":" 8082 #_(.getPort uri))
+                                 (str ":" 8082) #_(.getPort uri))
                                "/tweets/ws")))]
             (om/set-state! owner :ws-in (:in connection))
             (om/set-state! owner :ws-out (:out connection))
