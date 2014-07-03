@@ -59,8 +59,7 @@
 
 (defn y
   "Compute linear y component"
-  [data heigh
-   t]
+  [data height]
   (-> d3
       .-scale
       (.linear)
