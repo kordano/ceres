@@ -51,16 +51,13 @@
 
 (defn dispatch
   "Dispatch incoming websocket-requests"
-  [{:keys [topic data]}]
+  [{:keys [topic data] :as package}]
   (case topic
-    :news-frequencies {:topic :news-frequencies :data (get-news-frequencies)}
-    :time-distribution {:topic :time-distribution :data (mapv get-month-distribution data)}
-    :news-diffusion {:topic :news-diffusion :data (get-news-diffusion)}
-    :greeting {:topic :new-tweet
-               :data
-               {:recent-tweets (mapv extract-tweet-data (-> @server-state :app :recent-tweets))
-                :tweet-count (get-tweet-count)}}))
-
+    :news-frequencies (assoc package :data (get-news-frequencies))
+    :news-diffusion (assoc package :data (get-news-diffusion))
+    :init (assoc package :data
+                 {:recent-tweets (mapv extract-tweet-data (-> @server-state :app :recent-tweets))
+                  :tweet-count (get-tweet-count)})))
 
 (defn tweet-handler
   "Handle incoming tweets"
@@ -79,7 +76,6 @@
                   (info "tweet channel closed: " status "!")))
       (on-receive channel
                   (fn [data]
-                    (info "tweet channel opened!")
                     (send! channel (str (dispatch (read-string data)))))))))
 
 (defn stream-handler

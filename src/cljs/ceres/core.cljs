@@ -36,8 +36,9 @@
 (def app-state
   (atom
    {:tweets []
-    :ws-in (chan)
-    :ws-out (chan)
+    :ws-chs [(chan) (chan)]
+    :stats-ch (chan)
+    :tweets-ch (chan)
     :news-frequencies nil
     :news-diffusion nil
     :tweet-count 0}))
@@ -241,13 +242,13 @@
    (listen
     :on-click
     #(if (nil? (:news-diffusion @app))
-       (let [in (:ws-in @app)
-             out (:ws-out @app)]
+       (let [[ws-in ws-out] (:ws-chs @app)
+            out (:stats-ch @app)]
          (go
-           (>! in {:topic :news-diffusion :data ""})
+           (>! ws-in {:topic :news-diffusion :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-diffusion)
-               (.log js/console "diffusion data received!")
+               (.log js/console (str "diffusion data received:" topic ":" data ))
                (om/transact! app :news-diffusion (fn [old] data))
                (draw-chart data "diffusion-container")))))
        (do
@@ -258,14 +259,14 @@
    (listen
     :on-click
     #(if (nil? (:news-frequencies @app))
-       (let [in (:ws-in @app)
-             out (:ws-out @app)]
+       (let [[ws-in ws-out] (:ws-chs @app)
+            out (:stats-ch @app)]
          (go
-           (>! in {:topic :news-frequencies :data ""})
+           (>! ws-in {:topic :news-frequencies :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-frequencies)
                (do
-                 (.log js/console "frequencies data received!")
+                 (.log js/console (str "frequencies data received:" topic ":" data))
                  (om/transact! app :news-frequencies (fn [old] data))
                  (draw-chart data "tweets-count-container"))))))
        (do
@@ -277,15 +278,15 @@
   "Charts view showing "
   [app owner]
   (reify
-    om/IWillMount
-    (will-mount [_]
-      (let [in (:ws-in app)
-            out (:ws-out app)]
+    om/IDidMount
+    (did-mount [_]
+      (let [[ws-in ws-out] (:ws-chs app)
+            out (:stats-ch app)]
         (go
-          (>! in {:topic :news-frequencies :data ""})
+          (>! ws-in {:topic :news-frequencies :data ""})
           (let [{:keys [topic data] :as package} (<! out)]
             (do
-              (.log js/console "frequencies data received!")
+              (.log js/console (str "frequencies data received: " topic ":" data))
               (om/transact! app :news-frequencies (fn [old] data))
               (draw-chart data "tweets-count-container"))))))
     om/IRender
@@ -327,25 +328,19 @@
 
     om/IWillMount
     (will-mount [_]
-      (let [in (:ws-in app)
-            out (:ws-out app)]
+      (let [[ws-in ws-out] (:ws-chs app)
+            out (:tweets-ch app)]
         (go
-          (>! in {:topic :greeting :data ""})
-          (let [{:keys [topic data] :as package} (<! out)]
-            (om/transact!
-             app
-             :tweets
-             (fn [tweets]
-               (if (:recent-tweets data)
-                 (:recent-tweets data)
-                 (vec (take 100 (into [data] tweets))))))
-            (om/transact!
-             app
-             :tweet-count
-             (fn [tweet-count]
-               (if (:tweet-count data)
-                 (:tweet-count data)
-                 (inc tweet-count))))))))
+          (>! ws-in {:topic :init :data ""})
+          (loop []
+            (let [{:keys [topic data] :as package} (<! out)]
+              (case topic
+                :init (do (om/transact! app :tweets (fn [tweets] (:recent-tweets data)))
+                          (om/transact! app :tweet-count (fn [tweets] (:tweet-count data))))
+                :new-tweet
+                (do (om/transact! app :tweets (fn [tweets] (vec (take 100 (into [data] tweets)))))
+                      (om/transact! app :tweet-count inc))))
+            (recur)))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
       (om/build tweet-list app {:init-state state}))))
@@ -354,17 +349,28 @@
 ;; --- WS Connection and View Creation ---
 
 (go
+  ;; --- create ws connection and dispatch incoming packages to view-channels ---
+  (let [connection (<! (connect! (str (if ssl?  "wss://" "ws://")
+                                      (.getDomain uri)
+                                      ":" 8082 #_(.getPort uri)
+                                      "/tweets/ws")))
+        in (:in connection)
+        out (:out connection)
+        stats-ch (:stats-ch @app-state)
+        tweets-ch (:tweets-ch @app-state)]
+    (do
+      (swap! app-state (fn [old params] (assoc old :ws-chs params)) (vec [in out]))
+      (go
+        (loop []
+          (let [{:keys [topic data] :as package} (<! out)]
+            (case topic
+              :init (>! tweets-ch package)
+              :new-tweet (>! tweets-ch package)
+              :news-frequencies (>! stats-ch package)
+              :news-diffusion (>! stats-ch package)))
+          (recur)))))
 
-  (let [connection (<! (connect!
-                          (str
-                           (if ssl?  "wss://" "ws://")
-                           (.getDomain uri)
-                           ":"
-                           8082 #_(.getPort uri)
-                           "/tweets/ws")))]
-    (swap! app-state (fn [old params] (assoc old :ws-in params)) (:in connection))
-    (swap! app-state (fn [old params] (assoc old :ws-out params)) (:out connection)))
-
+    ;; --- render views ---
   (om/root
    #(om/component (navbar %))
    app-state
@@ -376,17 +382,3 @@
    {:target (. js/document (getElementById "side-container"))})
 
   )
-
-
-(comment
-  (go
-    (let [connection (<! (connect!
-                          (str
-                           (if ssl?  "wss://" "ws://")
-                           (.getDomain uri)
-                           ":"
-                           8082 #_(.getPort uri)
-                           "/tweets/ws")))]
-      (>! (:in connection) {:topic :time-distribution :data [5 6]})))
-
-)
