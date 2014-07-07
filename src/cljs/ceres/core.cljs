@@ -5,10 +5,12 @@
             [kioo.core :refer [handle-wrapper]]
             [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
+            [dommy.core :as dommy]
             [ceres.communicator :refer [connect!]]
             [strokes :refer [d3]]
             [cljs.core.async :refer [timeout put! chan <! alts! >!]])
   (:require-macros [kioo.om :refer [defsnippet deftemplate]]
+                   [dommy.macros :refer [node sel sel1]]
                    [cljs.core.async.macros :refer [go go-loop]] ))
 
 (enable-console-print!)
@@ -245,15 +247,14 @@
        (let [[ws-in ws-out] (:ws-chs @app)
             out (:stats-ch @app)]
          (go
+          (dommy/add-class! (sel1 :#stats-loading) "loading")
            (>! ws-in {:topic :news-diffusion :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-diffusion)
-               (.log js/console (str "diffusion data received:" topic ":" data ))
                (om/transact! app :news-diffusion (fn [old] data))
+               (dommy/remove-class! (sel1 :#stats-loading) "loading")
                (draw-chart data "diffusion-container")))))
-       (do
-         (.log js/console "using cache")
-         (draw-chart (:news-diffusion @app) "diffusion-container"))))
+       (draw-chart (:news-diffusion @app) "diffusion-container")))
 
    [:#tweets-count]
    (listen
@@ -262,16 +263,14 @@
        (let [[ws-in ws-out] (:ws-chs @app)
             out (:stats-ch @app)]
          (go
+          (dommy/add-class! (sel1 :#stats-loading) "loading")
            (>! ws-in {:topic :news-frequencies :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-frequencies)
-               (do
-                 (.log js/console (str "frequencies data received:" topic ":" data))
-                 (om/transact! app :news-frequencies (fn [old] data))
-                 (draw-chart data "tweets-count-container"))))))
-       (do
-         (.log js/console "using cache")
-         (draw-chart (:news-frequencies @app) "tweets-count-container"))))})
+               (om/transact! app :news-frequencies (fn [old] data))
+               (dommy/remove-class! (sel1 :#stats-loading) "loading")
+               (draw-chart data "tweets-count-container")))))
+       (draw-chart (:news-frequencies @app) "tweets-count-container")))})
 
 
 (defn stats-view
@@ -283,11 +282,12 @@
       (let [[ws-in ws-out] (:ws-chs app)
             out (:stats-ch app)]
         (go
+          (dommy/add-class! (sel1 :#stats-loading) "loading")
           (>! ws-in {:topic :news-frequencies :data ""})
           (let [{:keys [topic data] :as package} (<! out)]
-            (do
-              (.log js/console (str "frequencies data received: " topic ":" data))
+            (when (= topic :news-frequencies)
               (om/transact! app :news-frequencies (fn [old] data))
+              (dommy/remove-class! (sel1 :#stats-loading) "loading")
               (draw-chart data "tweets-count-container"))))))
     om/IRender
     (render [this]
@@ -296,26 +296,20 @@
 
 (deftemplate navbar "templates/navbar.html" [app]
   {[:#ceres-brand] (content "Collector")
-   [:#diffusion-btn] (listen
-                      :on-click
-                      (fn [e]
-                        (do
-                          (.log js/console "diffusion")
-                          (om/root
-                           #(om/component (dom/p nil "DIFFUSION!!!"))
-                           app
-                           {:target (. js/document (getElementById "central-container"))}))))
 
+   [:#diffusion-btn]
+   (listen
+    :on-click
+    (fn [e]
+      (om/root #(om/component (dom/p nil "DIFFUSION!!!")) app
+               {:target (. js/document (getElementById "central-container"))})))
 
-   [:#stats-btn] (listen
-                  :on-click
-                  (fn [e]
-                    (do
-                      (.log js/console "statistics")
-                      (om/root
-                       stats-view
-                       app
-                       {:target (. js/document (getElementById "central-container"))}))))})
+   [:#stats-btn]
+   (listen
+    :on-click
+    (fn [e]
+      (om/root stats-view app
+               {:target (. js/document (getElementById "central-container"))})))})
 
 
 (defn tweets-view
@@ -331,15 +325,16 @@
       (let [[ws-in ws-out] (:ws-chs app)
             out (:tweets-ch app)]
         (go
+          (dommy/add-class! (sel1 :#tweets-loading) "loading")
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
                 :init (do (om/transact! app :tweets (fn [tweets] (:recent-tweets data)))
+                          (dommy/remove-class! (sel1 :#tweets-loading) "loading")
                           (om/transact! app :tweet-count (fn [tweets] (:tweet-count data))))
-                :new-tweet
-                (do (om/transact! app :tweets (fn [tweets] (vec (take 100 (into [data] tweets)))))
-                      (om/transact! app :tweet-count inc))))
+                :new-tweet (do (om/transact! app :tweets (fn [tweets] (vec (take 100 (into [data] tweets)))))
+                               (om/transact! app :tweet-count inc))))
             (recur)))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]

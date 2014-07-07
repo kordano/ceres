@@ -17,3 +17,30 @@ tbody {
     border-left: 5px solid steelblue;
     border-right: 5px solid steelblue;
 }
+
+.loading {
+    width:0;
+  height:0;
+  border-right:20px solid #444;
+  border-top:20px solid #777;
+  border-left:20px solid #aaa;
+  border-bottom:20px solid #eee;
+  border-radius: 20px;
+  -moz-border-radius: 20px;
+  -webkit-border-radius: 20px;
+  animation: bganim 0.6s linear 0s infinite;
+  /* moz: Vendor prefixe for Mozilla Firefox */
+  -moz-animation: bganim 0.6s linear 0s infinite;
+  /* webkit: Vendor prefixe for Google Chrome, Chromium, Apple Safari... */
+  -webkit-animation: bganim 0.6s linear 0s infinite;}
+
+@keyframes bganim {
+  /* Rotate the div 360° */
+  from { transform:rotate(0deg); } to { transform:rotate(360deg); }
+}
+@-moz-keyframes bganim {
+  from { -moz-transform:rotate(0deg); } to { -moz-transform:rotate(360deg); }
+}
+@-webkit-keyframes bganim {
+  from { -webkit-transform:rotate(0deg); } to { -webkit-transform:rotate(360deg); }
+}
