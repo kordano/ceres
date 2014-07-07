@@ -226,26 +226,68 @@
 
 ;; --- tweet-list templates end ---
 
+(defn draw-chart
+  [data target]
+  (let [margin {:top 50 :right 60 :bottom 50 :left 1}
+        width (- (.-clientWidth (. js/document (getElementById target)))
+                 (margin :left)
+                 (margin :right))
+        height (- 500  (margin :top) (margin :bottom))]
+    (draw-bars target data height width margin)))
 
 (deftemplate chart-view "templates/stats.html" [app]
   {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
-   [:#diffusion] (listen :on-click #(let [data (:news-diffusion @app)
-                                          margin {:top 50 :right 60 :bottom 50 :left 1}
-                                          width (- (.-clientWidth (. js/document (getElementById "diffusion-container"))) (margin :left) (margin :right))
-                                          height (- 500  (margin :top) (margin :bottom))]
-                                      (draw-bars "diffusion-container" data height width margin)))
+   [:#diffusion]
+   (listen
+    :on-click
+    #(if (nil? (:news-diffusion @app))
+       (let [in (:ws-in @app)
+             out (:ws-out @app)]
+         (go
+           (>! in {:topic :news-diffusion :data ""})
+           (let [{:keys [topic data] :as package} (<! out)]
+             (when (= topic :news-diffusion)
+               (.log js/console "diffusion data received!")
+               (om/transact! app :news-diffusion (fn [old] data))
+               (draw-chart data "diffusion-container")))))
+       (do
+         (.log js/console "using cache")
+         (draw-chart (:news-diffusion @app) "diffusion-container"))))
 
-   [:#tweets-count] (listen :on-click #(let [data (:news-frequencies @app)
-                                           margin {:top 50 :right 60 :bottom 50 :left 1}
-                                           width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
-                                          height (- 500  (margin :top) (margin :bottom))]
-                                         (draw-bars "tweets-count-container" data height width margin)))})
+   [:#tweets-count]
+   (listen
+    :on-click
+    #(if (nil? (:news-frequencies @app))
+       (let [in (:ws-in @app)
+             out (:ws-out @app)]
+         (go
+           (>! in {:topic :news-frequencies :data ""})
+           (let [{:keys [topic data] :as package} (<! out)]
+             (when (= topic :news-frequencies)
+               (do
+                 (.log js/console "frequencies data received!")
+                 (om/transact! app :news-frequencies (fn [old] data))
+                 (draw-chart data "tweets-count-container"))))))
+       (do
+         (.log js/console "using cache")
+         (draw-chart (:news-frequencies @app) "tweets-count-container"))))})
 
 
 (defn stats-view
   "Charts view showing "
   [app owner]
   (reify
+    om/IWillMount
+    (will-mount [_]
+      (let [in (:ws-in app)
+            out (:ws-out app)]
+        (go
+          (>! in {:topic :news-frequencies :data ""})
+          (let [{:keys [topic data] :as package} (<! out)]
+            (do
+              (.log js/console "frequencies data received!")
+              (om/transact! app :news-frequencies (fn [old] data))
+              (draw-chart data "tweets-count-container"))))))
     om/IRender
     (render [this]
       (chart-view app))))
@@ -289,26 +331,21 @@
             out (:ws-out app)]
         (go
           (>! in {:topic :greeting :data ""})
-          (loop []
-            (let [{:keys [topic data] :as package} (<! out)]
-              (case topic
-                :new-tweet
-                (do
-                  (om/transact!
-                   app
-                   :tweets
-                   (fn [tweets]
-                     (if (:recent-tweets data)
-                       (:recent-tweets data)
-                       (vec (take 100 (into [data] tweets))))))
-                  (om/transact!
-                   app
-                   :tweet-count
-                   (fn [tweet-count]
-                     (if (:tweet-count data)
-                       (:tweet-count data)
-                       (inc tweet-count))))))
-              (recur))))))
+          (let [{:keys [topic data] :as package} (<! out)]
+            (om/transact!
+             app
+             :tweets
+             (fn [tweets]
+               (if (:recent-tweets data)
+                 (:recent-tweets data)
+                 (vec (take 100 (into [data] tweets))))))
+            (om/transact!
+             app
+             :tweet-count
+             (fn [tweet-count]
+               (if (:tweet-count data)
+                 (:tweet-count data)
+                 (inc tweet-count))))))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
       (om/build tweet-list app {:init-state state}))))
@@ -338,7 +375,6 @@
    app-state
    {:target (. js/document (getElementById "side-container"))})
 
-
   )
 
 
@@ -351,24 +387,6 @@
                            ":"
                            8082 #_(.getPort uri)
                            "/tweets/ws")))]
-      (>! (:in connection) {:topic :time-distribution :data [5 6]})
-      (println (-> (<! (:out connection)) :data ffirst :date js/Date.))))
+      (>! (:in connection) {:topic :time-distribution :data [5 6]})))
 
-                  :news-diffusion
-                  (om/transact!
-                   app
-                   :news-diffusion
-                   (fn [old] data))
-
-
-                  :news-frequencies
-                  (do
-                    (om/transact!
-                     app
-                     :news-frequencies
-                     (fn [old] data))
-                    (let [margin {:top 50 :right 60 :bottom 50 :left 1}
-                          width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
-                          height (- 500  (margin :top) (margin :bottom))]
-                      (draw-bars "tweets-count-container" data height width margin)))
-  )
+)
