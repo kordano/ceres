@@ -7,7 +7,7 @@
             [om.dom :as dom :include-macros true]
             [ceres.communicator :refer [connect!]]
             [strokes :refer [d3]]
-            [cljs.core.async :refer [put! chan <! alts! >!]])
+            [cljs.core.async :refer [timeout put! chan <! alts! >!]])
   (:require-macros [kioo.om :refer [defsnippet deftemplate]]
                    [cljs.core.async.macros :refer [go go-loop]] ))
 
@@ -36,6 +36,8 @@
 (def app-state
   (atom
    {:tweets []
+    :ws-in (chan)
+    :ws-out (chan)
     :news-frequencies nil
     :news-diffusion nil
     :tweet-count 0}))
@@ -225,13 +227,7 @@
 ;; --- tweet-list templates end ---
 
 
-(deftemplate navbar "templates/navbar.html" [app]
-  {[:#ceres-brand] (content "Collector")
-   [:#tweet-list-link] (listen :on-click #(.log js/console "tweet list"))
-   [:#statistics-link] (listen :on-click #(.log js/console "statistics"))})
-
-
-(deftemplate stat-screen "templates/stats.html" [app]
+(deftemplate chart-view "templates/stats.html" [app]
   {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
    [:#diffusion] (listen :on-click #(let [data (:news-diffusion @app)
                                           margin {:top 50 :right 60 :bottom 50 :left 1}
@@ -246,49 +242,117 @@
                                          (draw-bars "tweets-count-container" data height width margin)))})
 
 
+(defn stats-view
+  "Charts view showing "
+  [app owner]
+  (reify
+    om/IRender
+    (render [this]
+      (chart-view app))))
+
+
+(deftemplate navbar "templates/navbar.html" [app]
+  {[:#ceres-brand] (content "Collector")
+   [:#diffusion-btn] (listen
+                      :on-click
+                      (fn [e]
+                        (do
+                          (.log js/console "diffusion")
+                          (om/root
+                           #(om/component (dom/p nil "DIFFUSION!!!"))
+                           app
+                           {:target (. js/document (getElementById "central-container"))}))))
+
+
+   [:#stats-btn] (listen
+                  :on-click
+                  (fn [e]
+                    (do
+                      (.log js/console "statistics")
+                      (om/root
+                       stats-view
+                       app
+                       {:target (. js/document (getElementById "central-container"))}))))})
+
+
 (defn tweets-view
-  "Shows recent tweets, connects to server and updates automatically, "
+  "Shows recent tweets, connects to server and updates automatically"
   [app owner]
   (reify
     om/IInitState
     (init-state [_]
-      {:ws-in (chan)
-       :ws-out (chan)})
+      {:counter 0})
 
     om/IWillMount
     (will-mount [_]
-      (go
-        (let [connection (<! (connect!
-                              (str
-                               (if ssl?  "wss://" "ws://")
-                               (.getDomain uri)
-                               (when (= (.getDomain uri) "localhost")
-                                 (str ":" 8082) #_(.getPort uri))
-                               "/tweets/ws")))]
-            (om/set-state! owner :ws-in (:in connection))
-            (om/set-state! owner :ws-out (:out connection))
-            (>! (:in connection) {:topic :greeting :data ""})
-            (>! (:in connection) {:topic :news-frequencies :data ""})
-            (>! (:in connection) {:topic :news-diffusion :data ""})
-            (loop []
-              (let [{:keys [topic data] :as package} (<! (:out connection))]
-                (case topic
-                  :new-tweet
-                  (do
-                    (om/transact!
-                     app
-                     :tweets
-                     (fn [tweets]
-                       (if (:recent-tweets data)
-                         (:recent-tweets data)
-                         (vec (take 100 (into [data] tweets))))))
-                    (om/transact!
-                     app
-                     :tweet-count
-                     (fn [tweet-count]
-                      (if (:tweet-count data)
-                         (:tweet-count data)
-                         (inc tweet-count)))))
+      (let [in (:ws-in app)
+            out (:ws-out app)]
+        (go
+          (>! in {:topic :greeting :data ""})
+          (loop []
+            (let [{:keys [topic data] :as package} (<! out)]
+              (case topic
+                :new-tweet
+                (do
+                  (om/transact!
+                   app
+                   :tweets
+                   (fn [tweets]
+                     (if (:recent-tweets data)
+                       (:recent-tweets data)
+                       (vec (take 100 (into [data] tweets))))))
+                  (om/transact!
+                   app
+                   :tweet-count
+                   (fn [tweet-count]
+                     (if (:tweet-count data)
+                       (:tweet-count data)
+                       (inc tweet-count))))))
+              (recur))))))
+    om/IRenderState
+    (render-state [this {:keys [counter] :as state}]
+      (om/build tweet-list app {:init-state state}))))
+
+
+;; --- WS Connection and View Creation ---
+
+(go
+
+  (let [connection (<! (connect!
+                          (str
+                           (if ssl?  "wss://" "ws://")
+                           (.getDomain uri)
+                           ":"
+                           8082 #_(.getPort uri)
+                           "/tweets/ws")))]
+    (swap! app-state (fn [old params] (assoc old :ws-in params)) (:in connection))
+    (swap! app-state (fn [old params] (assoc old :ws-out params)) (:out connection)))
+
+  (om/root
+   #(om/component (navbar %))
+   app-state
+   {:target (. js/document (getElementById "main-navbar"))})
+
+  (om/root
+   tweets-view
+   app-state
+   {:target (. js/document (getElementById "side-container"))})
+
+
+  )
+
+
+(comment
+  (go
+    (let [connection (<! (connect!
+                          (str
+                           (if ssl?  "wss://" "ws://")
+                           (.getDomain uri)
+                           ":"
+                           8082 #_(.getPort uri)
+                           "/tweets/ws")))]
+      (>! (:in connection) {:topic :time-distribution :data [5 6]})
+      (println (-> (<! (:out connection)) :data ffirst :date js/Date.))))
 
                   :news-diffusion
                   (om/transact!
@@ -306,42 +370,5 @@
                     (let [margin {:top 50 :right 60 :bottom 50 :left 1}
                           width (- (.-clientWidth (. js/document (getElementById "tweets-count-container"))) (margin :left) (margin :right))
                           height (- 500  (margin :top) (margin :bottom))]
-                      (draw-bars "tweets-count-container" data height width margin))))
-                (recur))))))
-
-    om/IRenderState
-    (render-state [this {:keys [ws-out] :as state}]
-      (om/build tweet-list app {:init-state state}))))
-
-
-;; --- ROOTS ---
-
-(om/root
- tweets-view
- app-state
- {:target (. js/document (getElementById "side-container"))})
-
-(om/root
- #(om/component (navbar %))
- app-state
- {:target (. js/document (getElementById "main-navbar"))})
-
-(om/root
- #(om/component (stat-screen %))
- app-state
- {:target (. js/document (getElementById "central-container"))})
-
-
-(comment
-  (go
-    (let [connection (<! (connect!
-                          (str
-                           (if ssl?  "wss://" "ws://")
-                           (.getDomain uri)
-                           ":"
-                           8082 #_(.getPort uri)
-                           "/tweets/ws")))]
-      (>! (:in connection) {:topic :time-distribution :data [5 6]})
-      (println (-> (<! (:out connection)) :data ffirst :date js/Date.))))
-
+                      (draw-bars "tweets-count-container" data height width margin)))
   )
