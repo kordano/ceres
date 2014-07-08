@@ -182,7 +182,7 @@
 
 
 (defn get-tweet-count []
-  (mc/count (:db @mongo-state) "tweets"))
+  (mc/count (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
 
 
 (defn get-tweets-from-date [month day]
@@ -279,5 +279,6 @@
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
 
+  (get-tweet-count)
 
 )

@@ -21,13 +21,13 @@ tbody {
 .loading {
     width:0;
   height:0;
-  border-right:20px solid #444;
-  border-top:20px solid #777;
-  border-left:20px solid #aaa;
-  border-bottom:20px solid #eee;
-  border-radius: 20px;
-  -moz-border-radius: 20px;
-  -webkit-border-radius: 20px;
+  border-right:12px solid #444;
+  border-top:12px solid #777;
+  border-left:12px solid #aaa;
+  border-bottom:12px solid #eee;
+  border-radius: 12px;
+  -moz-border-radius: 12px;
+  -webkit-border-radius: 12px;
   animation: bganim 0.6s linear 0s infinite;
   /* moz: Vendor prefixe for Mozilla Firefox */
   -moz-animation: bganim 0.6s linear 0s infinite;

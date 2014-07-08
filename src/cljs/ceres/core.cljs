@@ -59,7 +59,7 @@
       .-scale
       (.ordinal)
       (.domain (vec (keys data)))
-      (.rangeRoundBands [0 width] 0.5)))
+      (.rangeRoundBands [0 width] 0.25)))
 
 
 (defn y
@@ -86,6 +86,7 @@
       (.axis)
       (.scale y)
       (.orient "left")))
+
 
 (defn create-remove-svg
   "Create remove function"
@@ -160,8 +161,9 @@
       (-> bars
           (.append "text")
           (.attr {:x (/ (.rangeBand x1) 2)
-                  :y (fn [[k v] i] (- height (- (y1 v) 15)))
-                  :text-anchor "middle"})
+                  :y (fn [[k v] i] (- height (- (y1 v) 11)))
+                  :text-anchor "middle"
+                  :font-size 10})
           (.style "fill" "white")
           (.text (fn [[k v] i] v))))))
 
@@ -237,6 +239,7 @@
                  (margin :right))
         height (- 500  (margin :top) (margin :bottom))]
     (draw-bars target data height width margin)))
+
 
 (deftemplate chart-view "templates/stats.html" [app]
   {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
@@ -364,6 +367,7 @@
               :news-frequencies (>! stats-ch package)
               :news-diffusion (>! stats-ch package)))
           (recur)))))
+
 
     ;; --- render views ---
   (om/root
