@@ -33,7 +33,12 @@
         :repl-env (weasel.repl.websocket/repl-env
                    :ip "0.0.0.0" :port 17782)))
 
-(ws-repl/connect "ws://localhost:17782" :verbose true)
+(when (= (.getDomain uri) "localhost")
+  (ws-repl/connect "ws://localhost:17782" :verbose true)
+  (fw/watch-and-reload
+  ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
+ :jsload-callback (fn [] (print "reloaded"))))
+
 
 (def app-state
   (atom
@@ -45,9 +50,7 @@
     :news-diffusion nil
     :tweet-count 0}))
 
-(fw/watch-and-reload
-  ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
- :jsload-callback (fn [] (print "reloaded"))) ;; optional callback
+ ;; optional callback
 
 
 ;; --- D3 barchart ---
@@ -352,7 +355,8 @@
   ;; --- create ws connection and dispatch incoming packages to view-channels ---
   (let [connection (<! (connect! (str (if ssl?  "wss://" "ws://")
                                       (.getDomain uri)
-                                      ":" 8082 #_(.getPort uri)
+                                      (when (= (.getDomain uri) "localhost")
+                                        (str ":" 8082 #_(.getPort uri)))
                                       "/tweets/ws")))
         in (:in connection)
         out (:out connection)
