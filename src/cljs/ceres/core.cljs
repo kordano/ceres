@@ -1,7 +1,7 @@
 (ns ceres.core
   (:require [figwheel.client :as fw :include-macros true]
             [weasel.repl :as ws-repl]
-            [kioo.om :refer [content set-attr do-> substitute listen prepend append html add-class remove-class]]
+            [kioo.om :refer [html-content content set-attr do-> substitute listen prepend append html add-class remove-class]]
             [kioo.core :refer [handle-wrapper]]
             [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
@@ -59,7 +59,7 @@
       .-scale
       (.ordinal)
       (.domain (vec (keys data)))
-      (.rangeRoundBands [0 width] 0.25)))
+      (.rangeRoundBands [0 width] 0.35)))
 
 
 (defn y
@@ -211,18 +211,20 @@
   {[:.tweet-item] (if (news-sources (:author tweet))
                     (add-class "tweet-news-item")
                     (remove-class "fade"))
-   [:.tweet-text] (content (:text tweet))
+   [:.tweet-text] (if (:url tweet)
+                    (html-content
+                     (clojure.string/replace
+                      (:text tweet)
+                      (re-pattern (:url tweet))
+                      (str "<a href='" (:url tweet) "' target='_blank'>" (:url tweet) "</a>")))
+                      (content (:text tweet)))
    [:.tweet-author] (content (str "@" (:author tweet)))
    [:.tweet-timestamp] (content (:timestamp tweet))
    [:.tweet-reaction] (content
                        (let [reaction (or (:retweet tweet) (:reply tweet))]
                          (if reaction
                            (html [:span.glyphicon.glyphicon-retweet])
-                           "")))
-   [:.tweet-url] (if (:url tweet)
-                   (do-> (set-attr "href" (:url tweet))
-                         (content (:url tweet)))
-                   (content ""))})
+                           "")))})
 
 
 (deftemplate tweet-list "templates/tweet-list.html" [data owner]
