@@ -104,11 +104,11 @@
        (assoc-in [:app :out-chans] [])
        (assoc-in [:app :recent-tweets] []))))
 
+
 (defn handle-export [query]
   (let [[m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
-       (->> (curator/get-tweets-from-date m d)
-           (map str)
-           (clojure.string/join "\n"))))
+    (export-edn m d)))
+
 
 (defroutes all-routes
   (resources "/")

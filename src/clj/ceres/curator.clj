@@ -119,11 +119,12 @@
                  (store data)) (split (slurp path) #"\n"))))
 
 
-(defn export-edn []
-  (->> (mc/find (:db @mongo-state) "tweets")
-       seq
-       (map #(str (from-db-object % true)))
-       (join "\n")))
+(defn export-edn [m d]
+  (->> (get-tweets-from-date m d)
+       (map #(dissoc % :_id))
+       (map #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+       (map str)
+       (clojure.string/join "\n")))
 
 
 (defn get-retweets
@@ -243,7 +244,6 @@
       day-range))))
 
 
-
 (comment
 
   (->> (mc/find (:db @mongo-state) "urls")
@@ -280,5 +280,13 @@
 
 
   (get-tweet-count)
+
+  (->> (mc/find (:db @mongo-state) "tweets")
+       seq
+       (map #(dissoc :_id (from-db-object % true)))
+       count)
+
+
+
 
 )
