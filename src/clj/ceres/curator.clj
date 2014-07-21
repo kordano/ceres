@@ -14,7 +14,9 @@
             [clj-time.core :as t])
  (:import org.bson.types.ObjectId))
 
+
 (timbre/refer-timbre)
+
 
 (def mongo-state
   (atom
@@ -23,6 +25,7 @@
           (mg/get-db (mg/connect sa opts) "athena"))
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
     :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"}}))
+
 
 (def months
   [(range 1 32)
@@ -38,6 +41,11 @@
    (range 1 31)
    (range 1 32)])
 
+
+(defn fetch-url [url]
+  (enlive/html-resource (java.net.URL. url)))
+
+
 (defn- expand-url
   "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
   [url-str]
@@ -46,68 +54,67 @@
     (do (.setInstanceFollowRedirects conn false)
         (info "Expanding " url)
         (.connect conn)
-        (let [expanded-url (.getHeaderField conn "Location")]
+        (let [expanded-url (.getHeaderField conn "Location")
+              content-type (.getContentType conn)]
           (try
             (do (.close (.getInputStream conn))
-                expanded-url)
+                {:url expanded-url
+                 :content-type content-type})
             (catch Exception e (do (error (str e))
-                                   (str "Not available"))))))))
+                                   {:url "Not available"
+                                    :content-type content-type})))))))
 
 
-(defn store-news
-  "Stores news data"
-  [record]
-  (let [id (:_id record)
-        news-source (-> record :user :screen_name)
-        record-urls (-> record :entities :urls)
-        url (if (empty? record-urls)
-              nil
-              (let [url-str (-> record-urls first :expanded_url)
-                    expanded-url (expand-url url-str)]
-                (if expanded-url
-                  expanded-url
-                  url-str)))
-        oid (ObjectId.)]
-    (info "Storing news " id)
+(defn store-url [{:keys [article record ts source]}]
+  (mc/insert-and-return
+   (:db @mongo-state)
+   "urls"
+   {:tweet record
+    :article article
+    :source source
+    :ts ts}))
+
+
+(defn store-article [{:keys [url content-type ts] :as expanded-url}]
+  (let [raw-html (slurp url)
+        html-title (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)]
     (mc/insert-and-return
      (:db @mongo-state)
-     "news"
-     {:_id oid
-      :news-source news-source
-      :url url
-      :record-id id})))
+     "articles"
+     {:url url
+      :title html-title
+      :content-type content-type
+      :html raw-html
+      :ts ts})))
 
-(defn store-url [record]
-  (let [id (:_id record)
-        record-urls (-> record :entities :urls)
-        urls (if (empty? record-urls)
-               nil
-               (map
-                #(let [expanded-url (expand-url (:expanded_url %))]
-                   (if expanded-url
-                     expanded-url
-                     (:expanded_url %)))
-                record-urls))]
-    (if urls
-      (doall
-       (pmap
-        #(mc/insert-and-return
-         (:db @mongo-state)
-         "urls"
-         {:record-id id
-          :url %})
-        urls)))))
 
 (defn store
   "Stores the given tweet in mongodb"
   [tweet]
   (let [oid (ObjectId.)
         doc (update-in tweet [:created_at] (fn [x] (f/parse (:custom-formatter @mongo-state) x)))
-        record (mc/insert-and-return (:db @mongo-state) "tweets" (merge doc {:_id oid}))]
-    (if ((:news-accounts @mongo-state) (-> record :user :screen_name))
-      (store-news record)
-      record)
-    (store-url record)))
+        record (from-db-object (mc/insert-and-return (:db @mongo-state) "tweets" (merge doc {:_id oid})) true)
+        ts (:created_at record)
+        source ((:news-accounts @mongo-state) (-> record :user :screen_name))
+        record-urls (-> record :entities :urls)
+        expanded-urls (if (empty? record-urls)
+                        nil
+                        (map #(let [expanded-url (expand-url (:expanded_url %))]
+                                (if (:url expand-url)
+                                  expanded-url
+                                  (assoc expanded-url :url (:expanded_url %)))) record-urls))
+        articles (if (nil? expanded-urls)
+                   nil
+                   (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))]
+    (if (nil? articles)
+      nil
+      (doall
+       (map
+        #(if (:article %)
+           (store-url (assoc % :record oid :ts ts :source source))
+           (let [id (:_id (store-article (assoc % :ts ts)))]
+             (store-url (assoc % :article id :record oid :ts ts :source source))))
+        articles)))))
 
 
 ;;todo check if id exists in database
@@ -117,49 +124,6 @@
   (doall (map #(let [data (json/read-str % :key-fn keyword)]
                  (println "Importing " (:id data))
                  (store data)) (split (slurp path) #"\n"))))
-
-
-
-
-
-(defn get-retweets
-  "Fetches all retweets of given tweet id"
-  [id]
-  (->> (mc/find (:db @mongo-state) "tweets" {"retweeted_status.id" (Long/parseLong id)})
-       seq
-       (map #(from-db-object % true))))
-
-
-(defn get-tweets
-  "Fetches all tweets by a given twitter user"
-  [user]
-  (->> (mc/find (:db @mongo-state) "tweets" {:user.screen_name user :created_at {$gt (t/date-time 2014 7 1)}})
-       seq
-       (map #(from-db-object % true))))
-
-
-(defn get-mentions
-  "Fetches all tweets mentioning the given user"
-  [user]
-  (->> (mc/find (:db @mongo-state) "tweets" {"entities.user_mentions.screen_name" user})
-       seq
-       (map #(from-db-object % true))))
-
-
-(defn get-all-retweets
-  "Fetches all retweets of a given user"
-  [user]
-  (->> (mc/find (:db @mongo-state) "tweets" {"retweeted_status.user.screen_name" user})
-       seq
-       (map #(from-db-object % true))))
-
-
-(defn get-replies
-  "Fetches all replies to a given tweet id"
-  [id]
-  (->> (mc/find (:db @mongo-state) "tweets" {"in_reply_to_status_id" id})
-       seq
-       (map #(from-db-object % true))))
 
 
 (defn get-recent-tweets
@@ -207,6 +171,7 @@
                                                            {"in_reply_to_screen_name" user}]}
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
+
 (defn compute-tweet-diffusion [tweet-id]
   (let [neighbor-tweets (->> (mc/find
                               (:db @mongo-state)
@@ -239,7 +204,10 @@
       day-range))))
 
 
-(defn export-edn [m d]
+
+(defn export-edn
+  "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
+  [m d]
   (->> (get-tweets-from-date m d)
        (map #(dissoc % :_id))
        (map #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
@@ -247,31 +215,7 @@
        (clojure.string/join "\n")))
 
 
-
 (comment
-
-  (->> (mc/find (:db @mongo-state) "urls")
-       (map #(from-db-object % true))
-       (map :url)
-       frequencies)
-
-
-  (->>
-   (mc/find
-    (:db @mongo-state)
-    "tweets"
-    {:created_at
-     {$gt (t/date-time 2014 6 16 0 0 0 0)
-      $lte (t/date-time 2014 6 16 23 59 59 999)}})
-   seq
-   (map #(from-db-object % true))
-   (map (fn [tweet] (map (fn [hashtag] (:text hashtag)) (get-in tweet [:entities :hashtags]))))
-   flatten
-   frequencies
-   (sort-by val >)
-   (take 10))
-
-
 
   ;; TODO update on server
   (time
@@ -282,12 +226,34 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
-
-  (get-tweet-count)
-
-  (->> (mc/find (:db @mongo-state) "tweets")
+  (->> (mc/find (:db @mongo-state) "articles")
        seq
-       (map #(dissoc :_id (from-db-object % true)))
+       (map #(from-db-object % true)))
+
+  (let [raw-html (slurp "http://www.tagesschau.de/multimedia/bilder/mh17-bergung-120.html")]
+    (type raw-html)
+    (-> (enlive/html-resource (java.io.StringReader. raw-html))
+        clojure.pprint/pprint))
+
+  (take 10 (sort-by val > (-> (mc/find (:db @mongo-state) "articles")
+                              seq
+                              last
+                              (from-db-object true)
+                              :html
+                              (clojure.string/split #"\s")
+                              (into #{})
+                              frequencies)))
+
+  (->> (mc/find-maps (:db @mongo-state) "urls" {:source "SPIEGELONLINE"})
+       (map #(mc/find-maps (:db @mongo-state) "urls" {:article (:article %)}))
+       flatten
        count)
+
+  (->> (mc/find-maps (:db @mongo-state) "urls")
+       (map :article)
+       frequencies
+       (sort-by val >)
+       (take 10)
+       (map #(vec [(:title (mc/find-map-by-id (:db @mongo-state) "articles" (key %))) %])))
 
 )
