@@ -13,10 +13,6 @@
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
 
-(timbre/refer-timbre)
-#_(timbre/set-config! [:appenders :spit :enabled?] true)
-#_(timbre/set-config! [:shared-appender-config :spit-filename] "resources/collector.log")
-
 
 (deftemplate static-page
   (io/resource "public/index.html")
@@ -48,6 +44,9 @@
 
 (def server-state (atom nil))
 
+(timbre/refer-timbre)
+#_(timbre/set-config! [:appenders :spit :enabled?] true)
+#_(timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
 
 (defn dispatch
   "Dispatch incoming websocket-requests"
@@ -79,7 +78,7 @@
                     (send! channel (str (dispatch (read-string data)))))))))
 
 (defn stream-handler
-  "Reacts to incoming tweets"
+  "React to incoming tweets"
   [state tweet]
   (do
     (info (str "Storing tweet") (:id tweet))
@@ -95,7 +94,7 @@
      tweet)))
 
 (defn initialize
-  "Initializes the server state using a given config file"
+  "Initialize the server state using a given config file"
   [state path]
   (reset!
    state
@@ -105,7 +104,9 @@
        (assoc-in [:app :recent-tweets] []))))
 
 
-(defn handle-export [query]
+(defn handle-export
+  "Parse date from query and create edn-string"
+  [query]
   (let [[m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
     (export-edn m d)))
 
@@ -141,8 +142,8 @@
 
   (stop-stream)
 
-  (def server (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
+  (def stop-server (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
 
-  (server)
+  (stop-server)
 
 )
