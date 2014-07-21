@@ -34,7 +34,7 @@
                    :ip "0.0.0.0" :port 17782)))
 
 (when (= (.getDomain uri) "localhost")
-  (ws-repl/connect "ws://localhost:17782" :verbose true)
+  #_(ws-repl/connect "ws://localhost:17782" :verbose true)
   (fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))))
@@ -206,7 +206,6 @@
                 :d d-line}))))
 
 
-
 ;; --- tweet-list templates ---
 
 (defsnippet tweet-item "templates/tweet-list.html" [:.tweet-item]
@@ -255,12 +254,12 @@
        (let [[ws-in ws-out] (:ws-chs @app)
             out (:stats-ch @app)]
          (go
-          (dommy/add-class! (sel1 :#stats-loading) "loading")
+          (dommy/add-class! (sel1 :#stats-loading) "circle")
            (>! ws-in {:topic :news-diffusion :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-diffusion)
                (om/transact! app :news-diffusion (fn [old] data))
-               (dommy/remove-class! (sel1 :#stats-loading) "loading")
+               (dommy/remove-class! (sel1 :#stats-loading) "circle")
                (draw-chart data "diffusion-container")))))
        (draw-chart (:news-diffusion @app) "diffusion-container")))
 
@@ -271,12 +270,12 @@
        (let [[ws-in ws-out] (:ws-chs @app)
             out (:stats-ch @app)]
          (go
-          (dommy/add-class! (sel1 :#stats-loading) "loading")
+          (dommy/add-class! (sel1 :#stats-loading) "circle")
            (>! ws-in {:topic :news-frequencies :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-frequencies)
                (om/transact! app :news-frequencies (fn [old] data))
-               (dommy/remove-class! (sel1 :#stats-loading) "loading")
+               (dommy/remove-class! (sel1 :#stats-loading) "circle")
                (draw-chart data "tweets-count-container")))))
        (draw-chart (:news-frequencies @app) "tweets-count-container")))})
 
@@ -290,12 +289,12 @@
       (let [[ws-in ws-out] (:ws-chs app)
             out (:stats-ch app)]
         (go
-          (dommy/add-class! (sel1 :#stats-loading) "loading")
+          (dommy/add-class! (sel1 :#stats-loading) "circle")
           (>! ws-in {:topic :news-frequencies :data ""})
           (let [{:keys [topic data] :as package} (<! out)]
             (when (= topic :news-frequencies)
               (om/transact! app :news-frequencies (fn [old] data))
-              (dommy/remove-class! (sel1 :#stats-loading) "loading")
+              (dommy/remove-class! (sel1 :#stats-loading) "circle")
               (draw-chart data "tweets-count-container"))))))
     om/IRender
     (render [this]
@@ -333,13 +332,13 @@
       (let [[ws-in ws-out] (:ws-chs app)
             out (:tweets-ch app)]
         (go
-          (dommy/add-class! (sel1 :#tweets-loading) "loading")
+          (dommy/add-class! (sel1 :#tweets-loading) "circle")
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
                 :init (do (om/transact! app :tweets (fn [tweets] (:recent-tweets data)))
-                          (dommy/remove-class! (sel1 :#tweets-loading) "loading")
+                          (dommy/remove-class! (sel1 :#tweets-loading) "circle")
                           (om/transact! app :tweet-count (fn [tweets] (:tweet-count data))))
                 :new-tweet (do (om/transact! app :tweets (fn [tweets] (vec (take 100 (into [data] tweets)))))
                                (om/transact! app :tweet-count inc))))
