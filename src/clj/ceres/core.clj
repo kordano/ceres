@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [store get-tweet-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
+            [ceres.curator :refer [get-recent-articles store get-articles-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -25,6 +25,8 @@
   [:#d3-js] (set-attr "src" "static/d3/d3.min.js")
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
+(defn format-article [article]
+  (dissoc article :html :_id :content-type))
 
 (defn extract-tweet-data
   "Prepares data for client"
@@ -48,6 +50,7 @@
 #_(timbre/set-config! [:appenders :spit :enabled?] true)
 #_(timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
 
+
 (defn dispatch
   "Dispatch incoming websocket-requests"
   [{:keys [topic data] :as package}]
@@ -55,8 +58,9 @@
     :news-frequencies (assoc package :data (get-news-frequencies))
     :news-diffusion (assoc package :data (get-news-diffusion))
     :init (assoc package :data
-                 {:recent-tweets (mapv extract-tweet-data (-> @server-state :app :recent-tweets))
-                  :tweet-count (get-tweet-count)})))
+                 {:recent-articles (-> @server-state :app :recent-articles)
+                  :articles-count (get-articles-count)})))
+
 
 (defn tweet-handler
   "Handle incoming tweets"
@@ -77,21 +81,17 @@
                   (fn [data]
                     (send! channel (str (dispatch (read-string data)))))))))
 
+
 (defn stream-handler
   "React to incoming tweets"
   [state tweet]
-  (do
-    (info (str "Storing tweet") (:id tweet))
-    (store tweet)
-    (let [data (extract-tweet-data tweet)]
-      (doall
-       (map #(put! % {:topic :new-tweet :data data}) (-> @state :app :out-chans))))
-    (swap!
-     state
-     update-in
-     [:app :recent-tweets]
-     (fn [old new] (vec (take 100 (into [new] old))))
-     tweet)))
+  (let [articles (mapv format-article (store tweet))
+        data (extract-tweet-data tweet)]
+    (swap! state update-in [:app :recent-articles] (fn [old new] (vec (take 100 (into old new)))) articles)
+    (when (not(empty? articles))
+      (doall (map #(put! % {:topic :new-article :data articles}) (-> @state :app :out-chans))))
+    (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
+
 
 (defn initialize
   "Initialize the server state using a given config file"
@@ -101,7 +101,8 @@
    (-> path slurp read-string
        (assoc-in [:app :handler] (partial stream-handler state))
        (assoc-in [:app :out-chans] [])
-       (assoc-in [:app :recent-tweets] []))))
+       (assoc-in [:app :recent-tweets] [])
+       (assoc-in [:app :recent-articles] []))))
 
 
 (defn handle-export

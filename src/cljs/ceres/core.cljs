@@ -34,7 +34,7 @@
                    :ip "0.0.0.0" :port 17782)))
 
 (when (= (.getDomain uri) "localhost")
-  #_(ws-repl/connect "ws://localhost:17782" :verbose true)
+  (ws-repl/connect "ws://localhost:17782" :verbose true)
   (fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
  :jsload-callback (fn [] (print "reloaded"))))
@@ -43,12 +43,13 @@
 (def app-state
   (atom
    {:tweets []
+    :articles #{}
     :ws-chs [(chan) (chan)]
     :stats-ch (chan)
-    :tweets-ch (chan)
+    :articles-ch (chan)
     :news-frequencies nil
     :news-diffusion nil
-    :tweet-count 0}))
+    :articles-count 0}))
 
  ;; optional callback
 
@@ -233,7 +234,23 @@
   {[:#tweet-collection] (content (doall (map #(tweet-item % owner) (:tweets data))))
    [:#tweet-overall-count] (content (:tweet-count data))})
 
-;; --- tweet-list templates end ---
+
+;; --- articles list templates ---
+(defsnippet article-item "templates/articles.html" [:.article-item]
+  [article owner]
+  {[:.article-text] (do->
+                     (set-attr :href (:url article))
+                     (content (:title article)))
+   [:.article-timestamp] (content (.toString (:ts article)))})
+
+
+
+(deftemplate articles-list "templates/articles.html"
+  [data owner]
+  {[:#article-collection] (content (doall (map #(article-item % owner) (sort-by :ts > (:articles data)))))
+   [:#article-overall-count] (content (:articles-count data))})
+;; --- articles list templates end ---
+
 
 (defn draw-chart
   [data target]
@@ -330,23 +347,51 @@
     om/IWillMount
     (will-mount [_]
       (let [[ws-in ws-out] (:ws-chs app)
-            out (:tweets-ch app)]
+            out (:articles-ch app)]
         (go
           (dommy/add-class! (sel1 :#tweets-loading) "circle")
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
-                :init (do (om/transact! app :tweets (fn [tweets] (:recent-tweets data)))
-                          (dommy/remove-class! (sel1 :#tweets-loading) "circle")
-                          (om/transact! app :tweet-count (fn [tweets] (:tweet-count data))))
-                :new-tweet (do (om/transact! app :tweets (fn [tweets] (vec (take 100 (into [data] tweets)))))
-                               (om/transact! app :tweet-count inc))))
+                :init (do (om/transact! app :articles (fn [tweets] (:recent-articles data)))
+                          (dommy/remove-class! (sel1 :#articles-loading) "circle")
+                          (om/transact! app :articles-count (fn [tweets] (:articles-count data))))
+                :new-article (do (om/transact! app :articles (fn [tweets] (vec (take 100 (into [data] tweets)))))
+                               (om/transact! app :articles-count inc))))
             (recur)))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
       (om/build tweet-list app {:init-state state}))))
 
+
+(defn articles-view
+  "Shows recent articles, connects to server and updates automatically"
+  [app owner]
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:counter 0})
+
+    om/IWillMount
+    (will-mount [_]
+      (let [[ws-in ws-out] (:ws-chs app)
+            out (:articles-ch app)]
+        (go
+          (dommy/add-class! (sel1 :#articles-loading) "circle")
+          (>! ws-in {:topic :init :data ""})
+          (loop []
+            (let [{:keys [topic data] :as package} (<! out)]
+              (case topic
+                :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %)))  (:recent-articles data)))))
+                          (dommy/remove-class! (sel1 :#articles-loading) "circle")
+                          (om/transact! app :articles-count (fn [counter] (:articles-count data))))
+                :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %))) data))))))
+                                 (om/transact! app :articles-count inc))))
+            (recur)))))
+    om/IRenderState
+    (render-state [this {:keys [counter] :as state}]
+      (om/build articles-list app {:init-state state}))))
 
 ;; --- WS Connection and View Creation ---
 
@@ -360,15 +405,15 @@
         in (:in connection)
         out (:out connection)
         stats-ch (:stats-ch @app-state)
-        tweets-ch (:tweets-ch @app-state)]
+        articles-ch (:articles-ch @app-state)]
     (do
       (swap! app-state (fn [old params] (assoc old :ws-chs params)) (vec [in out]))
       (go
         (loop []
           (let [{:keys [topic data] :as package} (<! out)]
             (case topic
-              :init (>! tweets-ch package)
-              :new-tweet (>! tweets-ch package)
+              :init (>! articles-ch package)
+              :new-article (>! articles-ch package)
               :news-frequencies (>! stats-ch package)
               :news-diffusion (>! stats-ch package)))
           (recur)))))
@@ -381,8 +426,7 @@
    {:target (. js/document (getElementById "main-navbar"))})
 
   (om/root
-   tweets-view
+   articles-view
    app-state
    {:target (. js/document (getElementById "side-container"))})
-
   )

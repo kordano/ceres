@@ -52,7 +52,6 @@
   (let [url (java.net.URL. url-str)
         conn (.openConnection url)]
     (do (.setInstanceFollowRedirects conn false)
-        (info "Expanding " url)
         (.connect conn)
         (let [expanded-url (.getHeaderField conn "Location")
               content-type (.getContentType conn)]
@@ -111,9 +110,12 @@
       (doall
        (map
         #(if (:article %)
-           (store-url (assoc % :record oid :ts ts :source source))
-           (let [id (:_id (store-article (assoc % :ts ts)))]
-             (store-url (assoc % :article id :record oid :ts ts :source source))))
+           (do (store-url (assoc % :record oid :ts ts :source source))
+               (update-in (mc/find-map-by-id (:db @mongo-state) "articles" (:article %)) [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+           (let [article (store-article (assoc % :ts ts))]
+             (do (store-url (assoc % :article (:_id article) :record oid :ts ts :source source))
+                 (do (store-url (assoc % :record oid :ts ts :source source))
+                     (update-in article [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x)))))))
         articles)))))
 
 
@@ -204,7 +206,6 @@
       day-range))))
 
 
-
 (defn export-edn
   "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
   [m d]
@@ -213,6 +214,14 @@
        (map #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
        (map str)
        (clojure.string/join "\n")))
+
+(defn get-recent-articles []
+  (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/date-time 2014 7 20)}})
+       (pmap #(dissoc % :html :_id))
+       vec))
+
+(defn get-articles-count []
+  (mc/count (:db @mongo-state) "articles"))
 
 
 (comment
