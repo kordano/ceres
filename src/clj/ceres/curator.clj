@@ -148,15 +148,9 @@
 
 
 (defn get-tweets-from-date [month day]
-  (->> (mc/find
-        (:db @mongo-state)
-        "tweets"
-        {:created_at
-         {$gt (t/date-time 2014 month day 0 0 0 0)
-          $lte (t/date-time 2014 month day 23 59 59 999)}
-         })
-       seq
-       (pmap #(from-db-object % true))))
+  (mc/find-maps (:db @mongo-state) "tweets"
+                {:created_at {$gt (t/date-time 2014 month day 0 0 0 0)
+                              $lte (t/date-time 2014 month day 23 59 59 999)}}))
 
 
 (defn get-hashtag-frequencies [coll]
@@ -174,16 +168,18 @@
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
 
-(defn compute-tweet-diffusion [tweet-id]
-  (let [neighbor-tweets (->> (mc/find
+(defn compute-tweet-diffusion [tweet-id parents]
+  (let [tweet (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str tweet-id})
+        neighbor-tweets (->> (mc/find-maps
                               (:db @mongo-state)
                               "tweets"
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
-                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})
-                             (pmap #(from-db-object % true)))
+                                     {:created_at {$gt (t/date-time 2014 7 1)}}]}
+                              [:text :user.screen_name :id_str :in_reply_to_status_id_str :retweeted_status.id_str])
+                             (pmap #(assoc % :parents (into parents [(:_id tweet)]))))
         neightbar-ids (pmap :id_str neighbor-tweets)]
-    (merge neighbor-tweets (pmap #(compute-tweet-diffusion %) neightbar-ids))))
+    (merge neighbor-tweets (pmap #(compute-tweet-diffusion % (into parents [(:_id tweet)])) neightbar-ids))))
 
 
 (defn get-news-diffusion []
@@ -238,46 +234,48 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
-  (->> (mc/find (:db @mongo-state) "articles")
-       seq
-       (map #(from-db-object % true)))
 
-  (let [raw-html (slurp "http://www.tagesschau.de/multimedia/bilder/mh17-bergung-120.html")]
-    (type raw-html)
-    (-> (enlive/html-resource (java.io.StringReader. raw-html))
-        clojure.pprint/pprint))
-
-  (take 10 (sort-by val > (-> (mc/find (:db @mongo-state) "articles")
-                              seq
-                              last
-                              (from-db-object true)
-                              :html
-                              (clojure.string/split #"\s")
-                              (into #{})
-                              frequencies)))
 
   (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
 
+  (mc/ensure-index (:db @mongo-state) "urls" (array-map :article 1))
+
+  (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id 1) {:unique true})
+
+  (def sz-url (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
+                  (map #(vec [(:_id %) (:title %) (first (find-source (:_id %)))]))
+                  (remove #(empty? (last %)))
+                  (filter #(= "SZ" (-> % last :source)))
+                  first))
 
 
-  (time
-   (loop [round 10]
-     (when (> round 0)
+  (def sz-tweet (mc/find-map-by-id (:db @mongo-state) "tweets" (-> sz-url last :tweet)))
 
-       (recur (dec round)))))
+  (->> (compute-tweet-diffusion (:id_str sz-tweet))
+       clojure.pprint/pprint)
 
-  (->> (mc/find-maps (:db @mongo-state) "urls" {:ts {$gt (t/date-time 2014 7 26 14)}})
-       (map :article)
-       frequencies
-       (sort-by val >)
-       (take 10)
-       )
 
-  (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
-       (take 50)
-       (map #(vec [(:title %) (find-source (:_id %))]))
-       (remove #(empty? (second %)))
-      clojure.pprint/pprint)
+
+  (->> (mc/find-maps (:db @mongo-state) "urls" {:article (first sz-url)})
+       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted :id_str])))
+       clojure.pprint/pprint)
+
+  (def spon-url (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
+                  (map #(vec [(:_id %) (:title %) (first (find-source (:_id %)))]))
+                  (remove #(empty? (last %)))
+                  (filter #(= "SPIEGELONLINE" (-> % last :source)))
+                  first))
+
+  (def spon-tweet (mc/find-map-by-id (:db @mongo-state) "tweets" (-> spon-url last :tweet)))
+
+  (->> (compute-tweet-diffusion (:id_str spon-tweet) [])
+       flatten
+       clojure.pprint/pprint)
+
+  (->> (mc/find-maps (:db @mongo-state) "urls" {:article (first spon-url)})
+       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted :id_str])))
+       (map #(-> % :tweet :text))
+       clojure.pprint/pprint)
 
 
   )
