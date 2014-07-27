@@ -224,6 +224,9 @@
   (mc/count (:db @mongo-state) "articles"))
 
 
+(defn find-source [id]
+  (mc/find-maps (:db @mongo-state) "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
+
 (comment
 
   ;; TODO update on server
@@ -253,16 +256,28 @@
                               (into #{})
                               frequencies)))
 
-  (->> (mc/find-maps (:db @mongo-state) "urls" {:source "SPIEGELONLINE"})
-       (map #(mc/find-maps (:db @mongo-state) "urls" {:article (:article %)}))
-       flatten
-       count)
+  (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
 
-  (->> (mc/find-maps (:db @mongo-state) "urls")
+
+
+  (time
+   (loop [round 10]
+     (when (> round 0)
+
+       (recur (dec round)))))
+
+  (->> (mc/find-maps (:db @mongo-state) "urls" {:ts {$gt (t/date-time 2014 7 26 14)}})
        (map :article)
        frequencies
        (sort-by val >)
        (take 10)
-       (map #(vec [(:title (mc/find-map-by-id (:db @mongo-state) "articles" (key %))) %])))
+       )
 
-)
+  (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
+       (take 50)
+       (map #(vec [(:title %) (find-source (:_id %))]))
+       (remove #(empty? (second %)))
+      clojure.pprint/pprint)
+
+
+  )
