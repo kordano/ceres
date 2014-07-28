@@ -64,6 +64,21 @@
                                     :content-type content-type})))))))
 
 
+(defn trace-parent
+  "Compute ancestor trace of given tweet"
+  [tweet origins]
+  (let [replied-id (:in_reply_to_status_id_str tweet)
+        retweeted-status-id (-> tweet :retweeted_status :id_str)
+        parent (if replied-id
+                 (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str replied-id})
+                 (if retweeted-status-id
+                   (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str retweeted-status-id})
+                   nil))]
+    (if parent
+      (trace-parent parent (into origins [(:_id parent)]))
+      origins)))
+
+
 (defn store-url [{:keys [article record ts source]}]
   (mc/insert-and-return
    (:db @mongo-state)
@@ -71,6 +86,17 @@
    {:tweet record
     :article article
     :source source
+    :ts ts}))
+
+
+(defn store-origin [{:keys [article record ts source ancestors]}]
+  (mc/insert-and-return
+   (:db @mongo-state)
+   "origins"
+   {:tweet record
+    :article article
+    :source source
+    :ancestors ancestors
     :ts ts}))
 
 
@@ -104,16 +130,17 @@
                                   (assoc expanded-url :url (:expanded_url %)))) record-urls))
         articles (if (nil? expanded-urls)
                    nil
-                   (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))]
+                   (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))
+        ancestors (trace-parent record [])]
     (if (nil? articles)
-      nil
+      (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors))
       (doall
        (map
         #(if (:article %)
-           (do (store-url (assoc % :record oid :ts ts :source source))
+           (do (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors))
                (update-in (mc/find-map-by-id (:db @mongo-state) "articles" (:article %)) [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
            (let [article (store-article (assoc % :ts ts))]
-             (do (store-url (assoc % :article (:_id article) :record oid :ts ts :source source))
+             (do (store-origin (assoc % :article (:_id article) :record oid :ts ts :source source :ancestors ancestors))
                  (do (store-url (assoc % :record oid :ts ts :source source))
                      (update-in article [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x)))))))
         articles)))))
@@ -255,12 +282,11 @@
        clojure.pprint/pprint)
 
 
-
   (->> (mc/find-maps (:db @mongo-state) "urls" {:article (first sz-url)})
        (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted :id_str])))
        clojure.pprint/pprint)
 
-  (def spon-url (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
+  (def spon-url (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/date-time 2014 7 27)}} [:title])
                   (map #(vec [(:_id %) (:title %) (first (find-source (:_id %)))]))
                   (remove #(empty? (last %)))
                   (filter #(= "SPIEGELONLINE" (-> % last :source)))
@@ -273,9 +299,29 @@
        clojure.pprint/pprint)
 
   (->> (mc/find-maps (:db @mongo-state) "urls" {:article (first spon-url)})
-       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted :id_str])))
-       (map #(-> % :tweet :text))
+       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted_status.id_str :id_str])))
+       count
        clojure.pprint/pprint)
 
+
+  (let [tweet (-> (mc/find-maps (:db @mongo-state) "tweets" {:created_at {$gt (t/today)}})
+                  rand-nth)
+        record-urls (-> tweet :entities :urls)
+        expanded-urls (if (empty? record-urls)
+                        nil
+                        (map #(let [expanded-url (expand-url (:expanded_url %))]
+                                (if (:url expand-url)
+                                  expanded-url
+                                  (assoc expanded-url :url (:expanded_url %)))) record-urls))
+        articles (if (nil? expanded-urls)
+                   nil
+                   (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))]
+    (-> (vec [(:text tweet) (trace-parent tweet []) articles])
+        clojure.pprint/pprint))
+
+  (->> (mc/find-maps (:db @mongo-state) "origins")
+       (map #(count (:ancestors %)))
+       (remove #(< % 2))
+       clojure.pprint/pprint)
 
   )
