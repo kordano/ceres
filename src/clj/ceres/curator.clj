@@ -133,7 +133,9 @@
                    (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))
         ancestors (trace-parent record [])]
     (if (nil? articles)
-      (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors))
+      (do
+        (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors))
+        nil)
       (doall
        (map
         #(if (:article %)
@@ -265,7 +267,7 @@
 
   (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
 
-  (mc/ensure-index (:db @mongo-state) "urls" (array-map :article 1))
+  (mc/ensure-index (:db @mongo-state) "origins" (array-map :ts 1 :article 1))
 
   (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id 1) {:unique true})
 
@@ -320,8 +322,7 @@
         clojure.pprint/pprint))
 
   (->> (mc/find-maps (:db @mongo-state) "origins")
-       (map #(count (:ancestors %)))
-       (remove #(< % 2))
-       clojure.pprint/pprint)
+       (filter #(nil? (-> % :article)))
+       )
 
   )
