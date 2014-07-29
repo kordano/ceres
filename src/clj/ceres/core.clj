@@ -13,6 +13,7 @@
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
 
+(timbre/refer-timbre)
 
 (deftemplate static-page
   (io/resource "public/index.html")
@@ -45,10 +46,6 @@
 
 
 (def server-state (atom nil))
-
-(timbre/refer-timbre)
-(timbre/set-config! [:appenders :spit :enabled?] true)
-(timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
 
 
 (defn dispatch
@@ -124,8 +121,10 @@
 
 (defn -main [& args]
   (initialize server-state (first args))
+  (timbre/set-config! [:appenders :spit :enabled?] true)
+  (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
-  (info (clojure.pprint/pprint @server-state))
+  (info @server-state)
   (run-server (site #'all-routes) {:port (:port @server-state) :join? false})
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
     (start-filter-stream follow track handler credentials)))
