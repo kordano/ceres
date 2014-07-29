@@ -47,8 +47,8 @@
 (def server-state (atom nil))
 
 (timbre/refer-timbre)
-#_(timbre/set-config! [:appenders :spit :enabled?] true)
-#_(timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
+(timbre/set-config! [:appenders :spit :enabled?] true)
+(timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
 
 
 (defn dispatch
@@ -80,7 +80,6 @@
       (on-receive channel
                   (fn [data]
                     (send! channel (str (dispatch (read-string data)))))))))
-
 
 (defn stream-handler
   "React to incoming tweets"
