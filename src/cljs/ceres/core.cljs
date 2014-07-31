@@ -167,9 +167,13 @@
           (.attr {:x (/ (.rangeBand x1) 2)
                   :y (fn [[k v] i] (- height (- (y1 v) 11)))
                   :text-anchor "middle"
-                  :font-size 10})
+                  :font-size 0})
           (.style "fill" "white")
-          (.text (fn [[k v] i] v))))))
+          (.text (fn [[k v] i] v))
+          (.transition)
+          (.delay 700)
+          (.duration 100)
+          (.attr {:font-size 10})))))
 
 
 ;; --- D3 line chart ---
@@ -271,12 +275,14 @@
        (let [[ws-in ws-out] (:ws-chs @app)
             out (:stats-ch @app)]
          (go
-          (dommy/add-class! (sel1 :#stats-loading) "circle")
+           (dommy/add-class! (sel1 :#stats-loading) "circle")
+           (dommy/set-text! (sel1 :#stats-loading-text) "Loading...")
            (>! ws-in {:topic :news-diffusion :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-diffusion)
                (om/transact! app :news-diffusion (fn [old] data))
                (dommy/remove-class! (sel1 :#stats-loading) "circle")
+               (dommy/set-text! (sel1 :#stats-loading-text) "")
                (draw-chart data "diffusion-container")))))
        (draw-chart (:news-diffusion @app) "diffusion-container")))
 
@@ -285,14 +291,16 @@
     :on-click
     #(if (nil? (:news-frequencies @app))
        (let [[ws-in ws-out] (:ws-chs @app)
-            out (:stats-ch @app)]
+             out (:stats-ch @app)]
          (go
-          (dommy/add-class! (sel1 :#stats-loading) "circle")
+           (dommy/add-class! (sel1 :#stats-loading) "circle")
+           (dommy/set-text! (sel1 :#stats-loading-text) "Loading...")
            (>! ws-in {:topic :news-frequencies :data ""})
            (let [{:keys [topic data] :as package} (<! out)]
              (when (= topic :news-frequencies)
                (om/transact! app :news-frequencies (fn [old] data))
                (dommy/remove-class! (sel1 :#stats-loading) "circle")
+               (dommy/set-text! (sel1 :#stats-loading-text) "")
                (draw-chart data "tweets-count-container")))))
        (draw-chart (:news-frequencies @app) "tweets-count-container")))})
 
@@ -307,11 +315,13 @@
             out (:stats-ch app)]
         (go
           (dommy/add-class! (sel1 :#stats-loading) "circle")
+           (dommy/set-text! (sel1 :#stats-loading-text) "Loading...")
           (>! ws-in {:topic :news-frequencies :data ""})
           (let [{:keys [topic data] :as package} (<! out)]
             (when (= topic :news-frequencies)
               (om/transact! app :news-frequencies (fn [old] data))
               (dommy/remove-class! (sel1 :#stats-loading) "circle")
+              (dommy/set-text! (sel1 :#stats-loading-text) "")
               (draw-chart data "tweets-count-container"))))))
     om/IRender
     (render [this]
@@ -379,12 +389,14 @@
             out (:articles-ch app)]
         (go
           (dommy/add-class! (sel1 :#articles-loading) "circle")
+          (dommy/set-text! (sel1 :#articles-loading-text) "Loading...")
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
                 :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %)))  (:recent-articles data)))))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
+                          (dommy/set-text! (sel1 :#articles-loading-text) "")
                           (om/transact! app :articles-count (fn [counter] (:articles-count data))))
                 :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %))) data))))))
                                  (om/transact! app :articles-count inc))))
