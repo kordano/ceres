@@ -142,7 +142,7 @@
           (.append "g")
           (.attr (clj->js {:class "bar"
                            :transform (fn [[k v] i] (str "translate(" (x1 k) ",0)"))}))
-          (.style {:fill "steelblue"})))))
+          (.style {:fill "#009871"})))))
 
 
 (defn draw-bars

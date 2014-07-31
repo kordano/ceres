@@ -140,7 +140,11 @@
 
   (stop-stream)
 
-  (def stop-server (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
+  (def stop-server
+    (do
+      (timbre/set-config! [:appenders :spit :enabled?] true)
+      (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
+      (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
 
