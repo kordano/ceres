@@ -254,6 +254,41 @@
   (mc/find-maps (:db @mongo-state) "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
 
 
+(defn spread [tweet]
+  (let [tweet-id (:id_str tweet)
+        neighbor-tweets (->> (mc/find-maps
+                              (:db @mongo-state)
+                              "tweets"
+                              {$and [{$or [{"retweeted_status.id_str" tweet-id}
+                                           {"in_reply_to_status_id_str" tweet-id}]}
+                                     {:created_at {$gt (t/date-time 2014 7 1)}}]}))]
+    {:source (:_id tweet)
+     :reactions (doall (pmap spread neighbor-tweets))}))
+
+(defn compute-impact-graph [origin]
+  (let [article (if (:article origin)
+                      (mc/find-map-by-id (:db @mongo-state) "articles" (:article origin))
+                      nil)
+        tweet (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet origin))]
+    (let [related-origins (if article
+                             (->> (mc/find-maps (:db @mongo-state) "origins" {:article  (:_id article)} [:tweet])
+                                  (remove #(= (:_id %) (:_id origin)))
+                                  (pmap :tweet)
+                                  (pmap #(mc/find-map-by-id (:db @mongo-state) "tweets" %)))
+                             nil)
+          related-tweets (->> (mc/find-maps
+                                (:db @mongo-state)
+                                "tweets"
+                                {$and [{$or [{"retweeted_status.id_str" (:id_str tweet)}
+                                             {"in_reply_to_status_id_str" (:id_str tweet)}]}
+                                       {:created_at {$gt (t/date-time 2014 7 1)}}]}))
+          merged-articles (into related-origins related-tweets)]
+      (->> {:source-article (:_id article)
+            :source-tweet (:_id tweet)
+            :reactions (pmap spread (into #{} merged-articles))}
+           clojure.pprint/pprint))))
+
+
 (comment
 
   ;; TODO update on server
@@ -273,32 +308,18 @@
 
   (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id 1) {:unique true})
 
-  (->> (mc/find-maps (:db @mongo-state) "urls" {:article (first sz-url)})
-       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted :id_str])))
-       clojure.pprint/pprint)
+  (compute-impact-graph (rand-nth (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}})))
 
 
-  (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/today)}} [:title])
-                  (map #(vec [(:_id %) (:title %) (first (find-source (:_id %)))]))
-                  (remove #(empty? (last %)))
-                  (filter #(= "SPIEGELONLINE" (-> % last :source)))
-                  rand-nth)
+  (->> (mc/find-maps (:db @mongo-state) "articles")
+       rand-nth
+       time)
 
-  (def spon-url (mc/find-map-by-id (:db @mongo-state) "urls" (ObjectId. "53d615fe657a4f9d852ca271")))
+  (mc/count (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}})
 
-  (def spon-tweet (mc/find-map-by-id (:db @mongo-state) "tweets" (-> spon-url :tweet)))
+  (-> (spread spon-tweet)
+      clojure.pprint/pprint)
 
-  spon-url
-  spon-tweet
 
-  (->> (compute-tweet-diffusion (:id_str spon-tweet) []) flatten count)
-
-  (->> (mc/find-maps (:db @mongo-state) "origins" {:article (:article spon-url)})
-       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted_status.id_str :id_str])))
-       count)
-
-(->> (mc/find-maps (:db @mongo-state) "urls" {:article (:article spon-url)})
-       (mapv #(assoc % :tweet  (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet %) [:in_reply_to_status_id_str :text :user.screen_name :retweeted_status.id_str :id_str])))
-       count)
 
   )
