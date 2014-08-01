@@ -251,7 +251,7 @@
 
 (deftemplate articles-list "templates/articles.html"
   [data owner]
-  {[:#article-collection] (content (doall (map #(article-item % owner) (sort-by :ts > (:articles data)))))
+  {[:#article-collection] (content (doall (map #(article-item % owner) (sort-by :ts > (mapv :article (:articles data))))))
    [:#article-overall-count] (content (:articles-count data))})
 ;; --- articles list templates end ---
 
@@ -394,11 +394,11 @@
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
-                :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %)))  (:recent-articles data)))))
+                :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %)))  (:recent-articles data)))))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
                           (dommy/set-text! (sel1 :#articles-loading-text) "")
                           (om/transact! app :articles-count (fn [counter] (:articles-count data))))
-                :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:ts] #(js/Date. %))) data))))))
+                :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) data))))))
                                  (om/transact! app :articles-count inc))))
             (recur)))))
     om/IRenderState

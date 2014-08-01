@@ -11,6 +11,8 @@
             [clojure.data.json :as json]
             [clj-time.format :as f]
             [taoensso.timbre :as timbre]
+            [clojure.walk :as walk]
+            [clojure.zip :as zip]
             [clj-time.core :as t])
  (:import org.bson.types.ObjectId))
 
@@ -141,11 +143,10 @@
        (map
         #(if (:article %)
            (do (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors :root (last ancestors)))
-               (update-in (mc/find-map-by-id (:db @mongo-state) "articles" (:article %)) [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
-           (let [article (store-article (assoc % :ts ts))]
-             (do (store-origin (assoc % :article (:_id article) :record oid :ts ts :source source :ancestors ancestors :root (last ancestors)))
-                 (do (store-url (assoc % :record oid :ts ts :source source))
-                     (update-in article [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x)))))))
+               nil)
+           (let [article (store-article (assoc % :ts ts))
+                 origin (store-origin (assoc % :article (:_id article) :record oid :ts ts :source source :ancestors ancestors :root (last ancestors)))]
+             {:article (update-in article [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))) :origin (str (:_id origin))}))
         articles)))))
 
 
@@ -262,8 +263,7 @@
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
                                      {:created_at {$gt (t/date-time 2014 7 1)}}]}))]
-    {:source (:_id tweet)
-     :reactions (doall (pmap spread neighbor-tweets))}))
+    [(:_id tweet) (vec (doall (pmap spread neighbor-tweets)))]))
 
 (defn compute-impact-graph [origin]
   (let [article (if (:article origin)
@@ -283,10 +283,21 @@
                                              {"in_reply_to_status_id_str" (:id_str tweet)}]}
                                        {:created_at {$gt (t/date-time 2014 7 1)}}]}))
           merged-articles (into related-origins related-tweets)]
-      (->> {:source-article (:_id article)
-            :source-tweet (:_id tweet)
-            :reactions (pmap spread (into #{} merged-articles))}
-           clojure.pprint/pprint))))
+      [(:_id origin) (vec (pmap spread (into #{} merged-articles)))])))
+
+
+(defn compute-dfs [graph]
+  (let [zipper (-> graph
+                   zip/vector-zip)]
+    (loop [counter 0
+           loc zipper]
+      (if (zip/end? loc)
+        counter
+        (recur
+         (if (vector? (zip/node loc))
+           counter
+           (inc counter))
+         (zip/next loc))))))
 
 
 (comment
@@ -301,25 +312,24 @@
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
 
-
   (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
 
   (mc/ensure-index (:db @mongo-state) "origins" (array-map :ts 1 :article 1))
 
   (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id 1) {:unique true})
 
-  (compute-impact-graph (rand-nth (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}})))
 
-
-  (->> (mc/find-maps (:db @mongo-state) "articles")
-       rand-nth
-       time)
-
-  (mc/count (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}})
-
-  (-> (spread spon-tweet)
-      clojure.pprint/pprint)
+  (def spon-articles (mc/find-maps (:db @mongo-state) "origins" {:source "SPIEGELONLINE"}))
 
 
 
-  )
+  (def spon-impact-graphs (vec (pmap compute-impact-graph spon-articles)))
+
+  (let [dfs (->> (pmap #(vec [(first %) (compute-dfs %)]) spon-impact-graphs)
+                 (map second))]
+    (->> dfs
+         frequencies
+         (clojure.core/sort-by first <)))
+
+
+)

@@ -26,7 +26,8 @@
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
 (defn format-article [article]
-  (dissoc article :html :_id :content-type))
+  (-> (update-in article [:article] #(dissoc % :html :content-type))
+      (update-in [:article :_id] str)))
 
 (defn extract-tweet-data
   "Prepares data for client"
@@ -77,13 +78,17 @@
                   (fn [data]
                     (send! channel (str (dispatch (read-string data)))))))))
 
+
 (defn stream-handler
   "React to incoming tweets"
   [state tweet]
-  (let [articles (mapv format-article (store tweet))
+  (let [articles (->> (store tweet)
+                      (remove nil?)
+                      (mapv format-article))
         data (extract-tweet-data tweet)]
     (swap! state update-in [:app :recent-articles] (fn [old new] (vec (take 100 (into old new)))) articles)
-    (when (not(empty? articles)) (doall (map #(put! % {:topic :new-article :data articles}) (-> @state :app :out-chans))))
+    (when (not(empty? articles))
+      (doall (map #(put! % {:topic :new-article :data articles}) (-> @state :app :out-chans))))
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
 
 
