@@ -28,6 +28,8 @@
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
     :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"}}))
 
+(defrecord Article [source tweet reactions])
+(defrecord Reaction [tweet reactions])
 
 (def months
   [(range 1 32)
@@ -263,9 +265,12 @@
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
                                      {:created_at {$gt (t/date-time 2014 7 1)}}]}))]
-    [(:_id tweet) (vec (doall (pmap spread neighbor-tweets)))]))
+    (Reaction. tweet (vec (doall (pmap spread neighbor-tweets))))))
 
-(defn compute-impact-graph [origin]
+
+(defn compute-impact-graph
+  "Create the impact graph using clojure zippers"
+  [origin]
   (let [article (if (:article origin)
                       (mc/find-map-by-id (:db @mongo-state) "articles" (:article origin))
                       nil)
@@ -274,7 +279,8 @@
                              (->> (mc/find-maps (:db @mongo-state) "origins" {:article  (:_id article)} [:tweet])
                                   (remove #(= (:_id %) (:_id origin)))
                                   (pmap :tweet)
-                                  (pmap #(mc/find-map-by-id (:db @mongo-state) "tweets" %)))
+                                  (pmap #(mc/find-map-by-id (:db @mongo-state) "tweets" %))
+                                  (filter #(or (nil? (-> % :retweeted_status :id_str)) (= (-> % :retweeted_status :id_str) (:id_str tweet)))))
                              nil)
           related-tweets (->> (mc/find-maps
                                 (:db @mongo-state)
@@ -283,21 +289,23 @@
                                              {"in_reply_to_status_id_str" (:id_str tweet)}]}
                                        {:created_at {$gt (t/date-time 2014 7 1)}}]}))
           merged-articles (into related-origins related-tweets)]
-      [(:_id origin) (vec (pmap spread (into #{} merged-articles)))])))
+      (zip/zipper
+       (fn [node] true)
+       (fn [node] (:reactions node))
+       (fn [node new-children] (assoc-in node [:reactions] new-children))
+       (Article. origin tweet (vec (pmap spread (into #{} merged-articles))))))))
 
 
 (defn compute-dfs [graph]
-  (let [zipper (-> graph
-                   zip/vector-zip)]
-    (loop [counter 0
-           loc zipper]
-      (if (zip/end? loc)
-        counter
-        (recur
-         (if (vector? (zip/node loc))
-           counter
-           (inc counter))
-         (zip/next loc))))))
+  (loop [counter 0
+         loc graph]
+    (if (zip/end? loc)
+      counter
+      (recur
+       (if (nil? (zip/node loc))
+         counter
+         (inc counter))
+       (zip/next loc)))))
 
 
 (comment
@@ -321,9 +329,10 @@
 
   (def spon-articles (mc/find-maps (:db @mongo-state) "origins" {:source "SPIEGELONLINE"}))
 
-
-
   (def spon-impact-graphs (vec (pmap compute-impact-graph spon-articles)))
+
+  (count spon-articles)
+
 
   (let [dfs (->> (pmap #(vec [(first %) (compute-dfs %)]) spon-impact-graphs)
                  (map second))]
@@ -331,5 +340,53 @@
          frequencies
          (clojure.core/sort-by first <)))
 
+  (def articles (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}))
+
+  (count articles)
+
+  (def rnd-spon-graph )
+
+  (clojure.pprint/pprint rnd-spon-graph)
+
+  (-> rnd-spon-graph
+      clojure.pprint/pprint)
+
+  (def example-graph (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53da170d657a10b9f098be86"))))
+
+  (->> (loop [loc example-graph]
+        (if (zip/end? loc)
+          (zip/root loc)
+          (recur
+           (if (nil? (zip/node loc))
+             (zip/next loc)
+             (zip/next (zip/edit loc (fn [x] (update-in
+                                             x
+                                             [:tweet]
+                                             #(into {} [
+                                                        [:text (-> % :text)]
+                                                        [:user (-> % :user :screen_name)]
+                                                        [:reply (-> % :in_reply_to_status_id_str)]
+                                                        [:rt (-> % :retweeted_status :id_str)]])))))))))
+       clojure.pprint/pprint)
+
+
+  (loop [counter 0
+         users []
+         loc example-graph]
+    (if (zip/end? loc)
+      [counter (frequencies users)]
+      (recur
+       (if (nil? (zip/node loc))
+          counter
+          (inc counter))
+       (if (nil? (zip/node loc))
+          users
+          (conj users (-> loc zip/node :tweet :user :screen_name)))
+       (zip/next loc))))
+
+  (let [artcl
+        graph (compute-impact-graph artcl)]
+    (->> graph
+         clojure.pprint/pprint))
 
 )
