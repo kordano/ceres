@@ -308,6 +308,40 @@
        (zip/next loc)))))
 
 
+(defn simplify-graph [graph]
+  (loop [loc graph]
+    (if (zip/end? loc)
+      (zip/root loc)
+      (recur
+       (if (nil? (zip/node loc))
+         (zip/next loc)
+         (zip/next
+          (zip/edit
+           loc
+           (fn [x]
+             (update-in
+              x
+              [:tweet]
+              #(into {} [
+                         [:text (-> % :text)]
+                         [:user (-> % :user :screen_name)]
+                         [:reply (-> % :in_reply_to_status_id_str)]
+                         [:rt (-> % :retweeted_status :id_str)]]))))))))))
+
+(defn tree-height [tree]
+  (loop [max-path 0
+         loc tree]
+    (if (zip/end? loc)
+      max-path
+      (recur
+       (if (zip/node loc)
+         (-> loc
+             zip/path
+             count
+             (max max-path))
+         max-path)
+       (zip/next loc)))))
+
 (comment
 
   ;; TODO update on server
@@ -342,32 +376,29 @@
 
   (def articles (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}))
 
-  (count articles)
-
-  (def rnd-spon-graph )
-
-  (clojure.pprint/pprint rnd-spon-graph)
-
-  (-> rnd-spon-graph
-      clojure.pprint/pprint)
 
   (def example-graph (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53da170d657a10b9f098be86"))))
 
-  (->> (loop [loc example-graph]
-        (if (zip/end? loc)
-          (zip/root loc)
-          (recur
-           (if (nil? (zip/node loc))
-             (zip/next loc)
-             (zip/next (zip/edit loc (fn [x] (update-in
-                                             x
-                                             [:tweet]
-                                             #(into {} [
-                                                        [:text (-> % :text)]
-                                                        [:user (-> % :user :screen_name)]
-                                                        [:reply (-> % :in_reply_to_status_id_str)]
-                                                        [:rt (-> % :retweeted_status :id_str)]])))))))))
+
+  (->> (simplify-graph (-> articles rand-nth compute-impact-graph))
        clojure.pprint/pprint)
+
+
+  (let [trees (pmap compute-impact-graph articles)]
+    (->> (pmap tree-height trees)
+         frequencies
+         clojure.pprint/pprint))
+
+
+  (-> example-graph
+      zip/down
+      zip/down
+      zip/down
+      zip/path
+      count
+      clojure.pprint/pprint)
+
+
 
 
   (loop [counter 0
@@ -388,5 +419,7 @@
         graph (compute-impact-graph artcl)]
     (->> graph
          clojure.pprint/pprint))
+
+
 
 )
