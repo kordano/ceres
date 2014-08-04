@@ -86,7 +86,7 @@
                       (remove nil?)
                       (mapv format-article))
         data (extract-tweet-data tweet)]
-    (swap! state update-in [:app :recent-articles] (fn [old new] (vec (take 100 (into old new)))) articles)
+    (swap! state update-in [:app :recent-articles] (fn [old new] (vec (take 250 (into new old)))) articles)
     (when (not(empty? articles))
       (doall (map #(put! % {:topic :new-article :data articles}) (-> @state :app :out-chans))))
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
