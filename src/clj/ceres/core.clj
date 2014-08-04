@@ -128,6 +128,8 @@
   (timbre/set-config! [:appenders :spit :enabled?] true)
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
+  (when (:init @server-state)
+    (curator/init-mongo))
   (info @server-state)
   (run-server (site #'all-routes) {:port (:port @server-state) :join? false})
   (let [{:keys [follow track handler credentials]} (:app @server-state)]

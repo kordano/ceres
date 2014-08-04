@@ -28,8 +28,22 @@
     :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
     :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"}}))
 
+
+(defn init-mongo []
+  (do
+    (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
+    (mc/ensure-index (:db @mongo-state) "origins" (array-map :ts 1))
+    (mc/ensure-index (:db @mongo-state) "origins" (array-map :source 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :user.screen_name 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id_str 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :retweeted_status.id_str 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :in_reply_to_status_id_str 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :created_at 1))))
+
+
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
+
 
 (def months
   [(range 1 32)
@@ -44,6 +58,8 @@
    (range 1 32)
    (range 1 31)
    (range 1 32)])
+
+
 
 
 (defn fetch-url [url]
@@ -172,8 +188,8 @@
 
 
 (defn get-news-frequencies []
-  (mapv #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %
-                                                        :created_at {$gt (t/date-time 2014 7 1)}})]) (:news-accounts @mongo-state)))
+  (vec (pmap #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %
+                                                             :created_at {$gt (t/date-time 2014 7 1)}})]) (:news-accounts @mongo-state))))
 
 
 (defn get-tweet-count []
@@ -309,10 +325,12 @@
 
 
 (defn simplify-graph [graph]
-  (loop [loc graph]
+  (loop [post-time (-> (zip/root graph) :source :ts)
+         loc graph]
     (if (zip/end? loc)
       (zip/root loc)
       (recur
+       post-time
        (if (nil? (zip/node loc))
          (zip/next loc)
          (zip/next
@@ -326,6 +344,13 @@
                          [:text (-> % :text)]
                          [:user (-> % :user :screen_name)]
                          [:reply (-> % :in_reply_to_status_id_str)]
+                         [:delay (let [post-delay (if (t/after? (-> % :created_at) post-time)
+                                                    (t/interval post-time (-> % :created_at))
+                                                    (t/interval (-> % :created_at) post-time))]
+                                   [(t/in-days post-delay)
+                                    (t/in-hours post-delay)
+                                    (t/in-minutes post-delay)
+                                    (t/in-seconds post-delay)])]
                          [:rt (-> % :retweeted_status :id_str)]]))))))))))
 
 (defn tree-height [tree]
@@ -354,13 +379,6 @@
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
 
-  (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
-
-  (mc/ensure-index (:db @mongo-state) "origins" (array-map :ts 1 :article 1))
-
-  (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id 1) {:unique true})
-
-
   (def spon-articles (mc/find-maps (:db @mongo-state) "origins" {:source "SPIEGELONLINE"}))
 
   (def spon-impact-graphs (vec (pmap compute-impact-graph spon-articles)))
@@ -383,43 +401,21 @@
   (->> (simplify-graph (-> articles rand-nth compute-impact-graph))
        clojure.pprint/pprint)
 
+  (count articles)
+
 
   (let [trees (pmap compute-impact-graph articles)]
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
 
-
-  (-> example-graph
-      zip/down
-      zip/down
-      zip/down
-      zip/path
-      count
-      clojure.pprint/pprint)
+  (->> (get-news-frequencies)
+       time)
 
 
-
-
-  (loop [counter 0
-         users []
-         loc example-graph]
-    (if (zip/end? loc)
-      [counter (frequencies users)]
-      (recur
-       (if (nil? (zip/node loc))
-          counter
-          (inc counter))
-       (if (nil? (zip/node loc))
-          users
-          (conj users (-> loc zip/node :tweet :user :screen_name)))
-       (zip/next loc))))
-
-  (let [artcl
-        graph (compute-impact-graph artcl)]
-    (->> graph
-         clojure.pprint/pprint))
-
+  (->> (pmap #(vector % (mc/count (:db @mongo-state) "origins" {:source %})) (:news-accounts @mongo-state))
+       vec
+       time)
 
 
 )
