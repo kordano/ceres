@@ -60,8 +60,6 @@
    (range 1 32)])
 
 
-
-
 (defn fetch-url [url]
   (enlive/html-resource (java.net.URL. url)))
 
@@ -202,6 +200,12 @@
                               $lte (t/date-time 2014 month day 23 59 59 999)}}))
 
 
+(defn get-articles-from-date [month day]
+  (mc/find-maps (:db @mongo-state) "articles"
+                {:ts {$gt (t/date-time 2014 month day 0 0 0 0)
+                      $lte (t/date-time 2014 month day 23 59 59 999)}}))
+
+
 (defn get-hashtag-frequencies [coll]
   (->> coll
        (map #(from-db-object % true))
@@ -255,10 +259,20 @@
   "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
   [m d]
   (->> (get-tweets-from-date m d)
-       (map #(dissoc % :_id))
+       (map #(update-in % [:_id] str))
        (map #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
        (map str)
        (clojure.string/join "\n")))
+
+
+(defn export-articles
+  [m d]
+  (->> (get-articles-from-date m d)
+       (pmap #(update-in % [:_id] str))
+       (pmap #(update-in % [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+       (pmap str)
+       (clojure.string/join "\n")))
+
 
 (defn get-recent-articles []
   (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/date-time 2014 7 20)}})
@@ -417,5 +431,20 @@
        vec
        time)
 
+  (def html-regexp #"<(.| )*?>")
+
+  (def the-html (:html (last (mc/find-maps (:db @mongo-state) "articles"))))
+
+  (->> (clojure.string/split the-html #"\n")
+       (map count)
+       (clojure.core/sort >))
+
+  (-> (get-articles-from-date 8 1)
+      count
+      time)
+
+
+  (-> (spit "/home/konny/data/articles-8-1.edn" (export-articles 8 1))
+      time)
 
 )
