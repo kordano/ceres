@@ -106,17 +106,24 @@
 
 (defn handle-export
   "Parse date from query and create edn-string"
-  [query]
+  [query type]
   (let [[m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
-    (export-edn m d)))
+    (case type
+      :tweets (export-edn m d)
+      :articles (curator/export-articles m d)
+      "N/A")))
 
 
 (defroutes all-routes
   (resources "/")
+
   (GET "/tweets/ws" [] tweet-handler)
 
   (GET "/tweets/export" request (let [query-params (-> request :query-params)]
-                                  (handle-export query-params)))
+                                  (handle-export query-params :tweets)))
+
+  (GET "/articles/export" request (let [query-params (-> request :query-params)]
+                                    (handle-export query-params :articles)))
 
   (GET "/*" [] (if (= (:build @server-state) :prod)
                  (static-page)
@@ -153,5 +160,7 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
+
+
 
 )
