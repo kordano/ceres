@@ -54,9 +54,9 @@
   (case topic
     :news-frequencies (assoc package :data (get-news-frequencies))
     :news-diffusion (assoc package :data (get-news-diffusion))
+    :tweets-count (assoc package :data (curator/get-tweet-count))
     :init (assoc package :data
                  {:recent-articles (-> @server-state :app :recent-articles)
-                  :tweets-count (curator/get-tweet-count)
                   :articles-count (get-articles-count)})))
 
 
@@ -161,5 +161,6 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
+
 
 )

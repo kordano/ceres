@@ -342,8 +342,18 @@
    (listen
     :on-click
     (fn [e]
-      (om/root stats-view app
-               {:target (. js/document (getElementById "central-container"))})))})
+      (let [[ws-in _] (:ws-chs @app)
+            out (:stats-ch @app)]
+        (go
+          (>! ws-in {:topic :tweets-count :data ""})
+          (let [{:keys [topic data] :as package} (<! out)]
+            (when (= topic :tweets-count)
+              (om/transact! app :tweets-count (fn [old] data))))
+          (<! (timeout 500))
+          (om/root
+           stats-view
+           app
+           {:target (. js/document (getElementById "central-container"))})))))})
 
 
 (defn tweets-view
@@ -366,11 +376,9 @@
               (case topic
                 :init (do (om/transact! app :articles (fn [tweets] (:recent-articles data)))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
-                          (om/transact! app :articles-count (fn [tweets] (:articles-count data)))
-                          (om/transact! app :tweets-count (fn [tweets] (:tweets-count data))))
+                          (om/transact! app :articles-count (fn [tweets] (:articles-count data))))
                 :new-article (do (om/transact! app :articles (fn [tweets] (vec (take 100 (into [data] tweets)))))
-                                 (om/transact! app :articles-count inc)))
-              (println (:tweets-count)))
+                                 (om/transact! app :articles-count inc))))
             (recur)))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
@@ -395,13 +403,11 @@
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
-              (println data)
               (case topic
                 :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %)))  (:recent-articles data)))))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
                           (dommy/set-text! (sel1 :#articles-loading-text) "")
-                          (om/transact! app :articles-count (fn [counter] (:articles-count data)))
-                          (om/transact! app :tweets-count (fn [t-count] (:tweets-count data))))
+                          (om/transact! app :articles-count (fn [counter] (:articles-count data))))
                 :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) data))))))
                                  (om/transact! app :articles-count inc))))
             (recur)))))
@@ -430,6 +436,7 @@
             (case topic
               :init (>! articles-ch package)
               :new-article (>! articles-ch package)
+              :tweets-count (>! stats-ch package)
               :news-frequencies (>! stats-ch package)
               :news-diffusion (>! stats-ch package)))
           (recur)))))

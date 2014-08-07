@@ -13,12 +13,18 @@
             [taoensso.timbre :as timbre]
             [clojure.walk :as walk]
             [clojure.zip :as zip]
-            [clj-time.core :as t])
+            [clj-time.core :as t]
+            [clojure.pprint :refer [pprint]])
  (:import org.bson.types.ObjectId))
 
 
 (timbre/refer-timbre)
 
+(def stopwords
+  (into #{}
+        (clojure.string/split
+             "aber,als,am,an,auch,auf,aus,bei,bin,bis,ist,da,dadurch,daher,darum,das,daß,dass,dein,deine,dem,den,der,des,dessen,deshalb,die,dies,dieser,dieses,doch,dort,du,durch,ein,eine,einem,einen,einer,eines,er,es,euer,eure,für,habe,hast,hat,haben,habt,hatte,hatten,hattest,hattet,hier,hinter,ich,ihr,ihre,im,in,ist,ja,jede,jedem,jeden,jeder,jedes,jener,jenes,jetzt,kann,kannst,können,könnt,machen,mein,meine,mit,muß,mußt,musst,müssen,müßt,nach,nachdem,nein,ncht,nun,oder,seid,sein,seine,sich,sie,sind,soll,sollen,sollst,sollt,sonst,soweit,sowie,und,unser,unsere,unter,vom,von,vor,wann,warum,was,weiter,weitere,wenn,wer,werde,werden,werdet,weshalb,wie,wieder,wieso,wir,wird,wirst,wo,woher,wohin,zu,zum,zur,über,rt"
+             #",")))
 
 (def mongo-state
   (atom
@@ -348,12 +354,25 @@
 (defn simplify-graph
   "Shows only specific elements in the nodes of an impact graph"
   [graph]
-  (loop [post-time (-> (zip/root graph) :source :ts)
+  (loop [pub-time (-> (zip/root graph) :source :ts)
+         hashtags []
+         tokens []
          loc graph]
     (if (zip/end? loc)
-      (zip/root loc)
+      {:nodes(zip/root loc)
+       :tokens (frequencies (remove #(= % "") tokens))
+       :hashtags (frequencies (map :text hashtags))}
       (recur
-       post-time
+       pub-time
+       (if-let [node (zip/node loc)]
+         (->> node :tweet :entities :hashtags (into hashtags))
+         hashtags)
+       (if (zip/node loc)
+         (let [text (clojure.string/lower-case (clojure.string/replace (-> loc zip/node :tweet :text) #"(\n|\d|\t|\,|\.)" " "))]
+           (->> (clojure.string/split text  #" ")
+                (remove #(contains? stopwords %))
+                (into tokens)))
+         tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
          (zip/next
@@ -367,9 +386,9 @@
                     :id (-> % :id_str)
                     :user (-> % :user :screen_name)
                     :reply (-> % :in_reply_to_status_id_str)
-                    :delay (let [post-delay (if (t/after? (-> % :created_at) post-time)
-                                              (t/interval post-time (-> % :created_at))
-                                              (t/interval (-> % :created_at) post-time))]
+                    :delay (let [post-delay (if (t/after? (-> % :created_at) pub-time)
+                                              (t/interval pub-time (-> % :created_at))
+                                              (t/interval (-> % :created_at) pub-time))]
                              [(t/in-days post-delay)
                               (t/in-hours post-delay)
                               (t/in-minutes post-delay)
@@ -395,13 +414,16 @@
 
 
 (defn example-graph []
-  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba"
-    (clojure.pprint/pprint [(simplify-graph tree) (tree-height tree)])))
+  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
+    {:graph (simplify-graph tree)
+     :height (tree-height tree)}))
 
 
 (defn random-graph []
   (let [tree (-> (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}) rand-nth compute-impact-graph)]
-    (clojure.pprint/pprint [(simplify-graph tree) (tree-height tree)])))
+    {:graph (simplify-graph tree)
+     :height (tree-height tree)
+     :size (compute-dfs tree)}))
 
 
 (comment
@@ -435,5 +457,7 @@
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
+
+  (pprint (random-graph))
 
 )
