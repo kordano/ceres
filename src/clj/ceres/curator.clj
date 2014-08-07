@@ -356,6 +356,7 @@
               [:tweet]
               #(into {} [
                          [:text (-> % :text)]
+                         [:id (-> % :id_str)]
                          [:user (-> % :user :screen_name)]
                          [:reply (-> % :in_reply_to_status_id_str)]
                          [:delay (let [post-delay (if (t/after? (-> % :created_at) post-time)
@@ -380,6 +381,13 @@
              (max max-path))
          max-path)
        (zip/next loc)))))
+
+
+(defn example-graph []
+  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))]
+    (-> [(simplify-graph tree) (tree-height tree)]
+        clojure.pprint/pprint)))
+
 
 (comment
 
@@ -412,39 +420,22 @@
   (def example-graph (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53da170d657a10b9f098be86"))))
 
 
-  (->> (simplify-graph (-> articles rand-nth compute-impact-graph))
+  (-> (let [tree (-> articles rand-nth compute-impact-graph)]
+        [(simplify-graph tree)
+         (tree-height tree)])
        clojure.pprint/pprint)
 
   (count articles)
 
+  (-> (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859"))
+      compute-impact-graph
+      simplify-graph
+      clojure.pprint/pprint)
 
   (let [trees (pmap compute-impact-graph articles)]
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
 
-  (->> (get-news-frequencies)
-       time)
-
-
-  (->> (pmap #(vector % (mc/count (:db @mongo-state) "origins" {:source %})) (:news-accounts @mongo-state))
-       vec
-       time)
-
-  (def html-regexp #"<(.| )*?>")
-
-  (def the-html (:html (last (mc/find-maps (:db @mongo-state) "articles"))))
-
-  (->> (clojure.string/split the-html #"\n")
-       (map count)
-       (clojure.core/sort >))
-
-  (-> (get-articles-from-date 8 1)
-      count
-      time)
-
-
-  (-> (spit "/home/konny/data/articles-8-1.edn" (export-articles 8 1))
-      time)
 
 )
