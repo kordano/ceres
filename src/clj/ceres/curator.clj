@@ -259,9 +259,9 @@
   "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
   [m d]
   (->> (get-tweets-from-date m d)
-       (map #(update-in % [:_id] str))
-       (map #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
-       (map str)
+       (pmap #(update-in % [:_id] str))
+       (pmap #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+       (pmap str)
        (clojure.string/join "\n")))
 
 
@@ -279,15 +279,20 @@
        (pmap #(dissoc % :html :_id))
        vec))
 
+
 (defn get-articles-count []
   (mc/count (:db @mongo-state) "articles"))
 
 
-(defn find-source [id]
+(defn find-source
+  "Find the source of a given article"
+  [id]
   (mc/find-maps (:db @mongo-state) "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
 
 
-(defn spread [tweet]
+(defn spread
+  "Find all tweets that are related to a given tweet by a retweet or reply"
+  [tweet]
   (let [tweet-id (:id_str tweet)
         neighbor-tweets (->> (mc/find-maps
                               (:db @mongo-state)
@@ -326,7 +331,9 @@
        (Article. origin tweet (vec (pmap spread (into #{} merged-articles))))))))
 
 
-(defn compute-dfs [graph]
+(defn compute-dfs
+  "Compute the amount of elements in the impact graph"
+  [graph]
   (loop [counter 0
          loc graph]
     (if (zip/end? loc)
@@ -338,7 +345,9 @@
        (zip/next loc)))))
 
 
-(defn simplify-graph [graph]
+(defn simplify-graph
+  "Shows only specific elements in the nodes of an impact graph"
+  [graph]
   (loop [post-time (-> (zip/root graph) :source :ts)
          loc graph]
     (if (zip/end? loc)
@@ -354,21 +363,23 @@
              (update-in
               x
               [:tweet]
-              #(into {} [
-                         [:text (-> % :text)]
-                         [:id (-> % :id_str)]
-                         [:user (-> % :user :screen_name)]
-                         [:reply (-> % :in_reply_to_status_id_str)]
-                         [:delay (let [post-delay (if (t/after? (-> % :created_at) post-time)
-                                                    (t/interval post-time (-> % :created_at))
-                                                    (t/interval (-> % :created_at) post-time))]
-                                   [(t/in-days post-delay)
-                                    (t/in-hours post-delay)
-                                    (t/in-minutes post-delay)
-                                    (t/in-seconds post-delay)])]
-                         [:rt (-> % :retweeted_status :id_str)]]))))))))))
+              #(-> {:text (-> % :text)
+                    :id (-> % :id_str)
+                    :user (-> % :user :screen_name)
+                    :reply (-> % :in_reply_to_status_id_str)
+                    :delay (let [post-delay (if (t/after? (-> % :created_at) post-time)
+                                              (t/interval post-time (-> % :created_at))
+                                              (t/interval (-> % :created_at) post-time))]
+                             [(t/in-days post-delay)
+                              (t/in-hours post-delay)
+                              (t/in-minutes post-delay)
+                              (t/in-seconds post-delay)])
+                    :rt (-> % :retweeted_status :id_str)}))))))))))
 
-(defn tree-height [tree]
+
+(defn tree-height
+  "Computes the height of a given impact tree, finding the longest path from root to a leaf node"
+  [tree]
   (loop [max-path 0
          loc tree]
     (if (zip/end? loc)
@@ -384,9 +395,13 @@
 
 
 (defn example-graph []
-  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))]
-    (-> [(simplify-graph tree) (tree-height tree)]
-        clojure.pprint/pprint)))
+  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba"
+    (clojure.pprint/pprint [(simplify-graph tree) (tree-height tree)])))
+
+
+(defn random-graph []
+  (let [tree (-> (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}) rand-nth compute-impact-graph)]
+    (clojure.pprint/pprint [(simplify-graph tree) (tree-height tree)])))
 
 
 (comment
@@ -400,25 +415,9 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
 
-
-  (def spon-articles (mc/find-maps (:db @mongo-state) "origins" {:source "SPIEGELONLINE"}))
-
-  (def spon-impact-graphs (vec (pmap compute-impact-graph spon-articles)))
-
-  (count spon-articles)
-
-
-  (let [dfs (->> (pmap #(vec [(first %) (compute-dfs %)]) spon-impact-graphs)
-                 (map second))]
-    (->> dfs
-         frequencies
-         (clojure.core/sort-by first <)))
-
   (def articles (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}))
 
-
   (def example-graph (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53da170d657a10b9f098be86"))))
-
 
   (-> (let [tree (-> articles rand-nth compute-impact-graph)]
         [(simplify-graph tree)
@@ -436,6 +435,5 @@
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
-
 
 )

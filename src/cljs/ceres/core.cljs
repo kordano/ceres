@@ -47,6 +47,7 @@
     :ws-chs [(chan) (chan)]
     :stats-ch (chan)
     :articles-ch (chan)
+    :tweets-count nil
     :news-frequencies nil
     :news-diffusion nil
     :articles-count 0}))
@@ -268,6 +269,7 @@
 
 (deftemplate chart-view "templates/stats.html" [app]
   {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
+   [:#tweets-overall-count] (content (:tweets-count app))
    [:#diffusion]
    (listen
     :on-click
@@ -330,14 +332,12 @@
 
 (deftemplate navbar "templates/navbar.html" [app]
   {[:#ceres-brand] (content "Collector")
-
    [:#diffusion-btn]
    (listen
     :on-click
     (fn [e]
       (om/root #(om/component (dom/p nil "DIFFUSION!!!")) app
                {:target (. js/document (getElementById "central-container"))})))
-
    [:#stats-btn]
    (listen
     :on-click
@@ -366,9 +366,11 @@
               (case topic
                 :init (do (om/transact! app :articles (fn [tweets] (:recent-articles data)))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
-                          (om/transact! app :articles-count (fn [tweets] (:articles-count data))))
+                          (om/transact! app :articles-count (fn [tweets] (:articles-count data)))
+                          (om/transact! app :tweets-count (fn [tweets] (:tweets-count data))))
                 :new-article (do (om/transact! app :articles (fn [tweets] (vec (take 100 (into [data] tweets)))))
-                               (om/transact! app :articles-count inc))))
+                                 (om/transact! app :articles-count inc)))
+              (println (:tweets-count)))
             (recur)))))
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
@@ -393,11 +395,13 @@
           (>! ws-in {:topic :init :data ""})
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
+              (println data)
               (case topic
                 :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %)))  (:recent-articles data)))))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
                           (dommy/set-text! (sel1 :#articles-loading-text) "")
-                          (om/transact! app :articles-count (fn [counter] (:articles-count data))))
+                          (om/transact! app :articles-count (fn [counter] (:articles-count data)))
+                          (om/transact! app :tweets-count (fn [t-count] (:tweets-count data))))
                 :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) data))))))
                                  (om/transact! app :articles-count inc))))
             (recur)))))
