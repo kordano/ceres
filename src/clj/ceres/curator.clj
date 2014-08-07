@@ -38,8 +38,8 @@
     (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id_str 1))
     (mc/ensure-index (:db @mongo-state) "tweets" (array-map :retweeted_status.id_str 1))
     (mc/ensure-index (:db @mongo-state) "tweets" (array-map :in_reply_to_status_id_str 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :created_at 1))))
-
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :created_at 1))
+    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
 
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
