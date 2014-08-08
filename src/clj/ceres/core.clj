@@ -167,19 +167,4 @@
   (stop-server)
 
 
-  ;; example server-config
-  {:port 8082
-   :build :dev
-   :logfile "/home/konny/projects/ceres/resources/ceres.log"
-   :init? false
-   :http-server? true
-   :app
-   {:credentials
-    {:consumer-key "????"
-     :consumer-secret "????"
-     :access-token "????"
-     :access-token-secret "????"}
-    :follow [114508061 18016521 5734902 40227292 2834511 9204502 15071293 19232587 15243812 8720562 1101354170 15738602 18774524 5494392]
-    :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE" "@BILD" "@DerWesten" "@ntvde" "@tazgezwitscher" "@welt" "@ZDFheute" "@N24_de" "@sternde" "@focusonline"]}}
-
   )
