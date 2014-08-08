@@ -1,55 +1,29 @@
 (ns ceres.curator
   (:refer-clojure :exclude [sort find])
-  (:require [monger.core :as mg]
-            [monger.collection :as mc]
+  (:require [monger.collection :as mc]
             [monger.operators :refer :all]
-            [monger.conversion :refer [from-db-object]]
             [monger.query :refer :all]
+            [clojure.data.json :as json]
             [monger.joda-time]
             [clojure.string :refer [split join]]
-            [net.cgrand.enlive-html :as enlive]
-            [clojure.data.json :as json]
-            [clj-time.format :as f]
             [taoensso.timbre :as timbre]
             [clojure.walk :as walk]
             [clojure.zip :as zip]
             [clj-time.core :as t]
-            [clojure.pprint :refer [pprint]])
+            [clojure.pprint :refer [pprint]]
+            [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
-
 (timbre/refer-timbre)
+
+(defrecord Article [source tweet reactions])
+(defrecord Reaction [tweet reactions])
 
 (def stopwords
   (into #{}
         (clojure.string/split
              "aber,als,am,an,auch,auf,aus,bei,bin,bis,ist,da,dadurch,daher,darum,das,daß,dass,dein,deine,dem,den,der,des,dessen,deshalb,die,dies,dieser,dieses,doch,dort,du,durch,ein,eine,einem,einen,einer,eines,er,es,euer,eure,für,habe,hast,hat,haben,habt,hatte,hatten,hattest,hattet,hier,hinter,ich,ihr,ihre,im,in,ist,ja,jede,jedem,jeden,jeder,jedes,jener,jenes,jetzt,kann,kannst,können,könnt,machen,mein,meine,mit,muß,mußt,musst,müssen,müßt,nach,nachdem,nein,ncht,nun,oder,seid,sein,seine,sich,sie,sind,soll,sollen,sollst,sollt,sonst,soweit,sowie,und,unser,unsere,unter,vom,von,vor,wann,warum,was,weiter,weitere,wenn,wer,werde,werden,werdet,weshalb,wie,wieder,wieso,wir,wird,wirst,wo,woher,wohin,zu,zum,zur,über,rt"
              #",")))
-
-(def mongo-state
-  (atom
-   {:db (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
-              ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
-          (mg/get-db (mg/connect sa opts) "athena"))
-    :custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY")
-    :news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"}}))
-
-
-(defn init-mongo []
-  (do
-    (mc/ensure-index (:db @mongo-state) "articles" (array-map :ts 1))
-    (mc/ensure-index (:db @mongo-state) "origins" (array-map :ts 1))
-    (mc/ensure-index (:db @mongo-state) "origins" (array-map :source 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :user.screen_name 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :id_str 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :retweeted_status.id_str 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :in_reply_to_status_id_str 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :created_at 1))
-    (mc/ensure-index (:db @mongo-state) "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
-
-(defrecord Article [source tweet reactions])
-(defrecord Reaction [tweet reactions])
-
 
 (def months
   [(range 1 32)
@@ -66,112 +40,6 @@
    (range 1 32)])
 
 
-(defn fetch-url [url]
-  (enlive/html-resource (java.net.URL. url)))
-
-
-(defn- expand-url
-  "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
-  [url-str]
-  (let [url (java.net.URL. url-str)
-        conn (.openConnection url)]
-    (do (.setInstanceFollowRedirects conn false)
-        (.connect conn)
-        (let [expanded-url (.getHeaderField conn "Location")
-              content-type (.getContentType conn)]
-          (try
-            (do (.close (.getInputStream conn))
-                {:url expanded-url
-                 :content-type content-type})
-            (catch Exception e (do (error (str e))
-                                   {:url "Not available"
-                                    :content-type content-type})))))))
-
-
-(defn trace-parent
-  "Compute ancestor trace of given tweet"
-  [tweet origins]
-  (let [replied-id (:in_reply_to_status_id_str tweet)
-        retweeted-status-id (-> tweet :retweeted_status :id_str)
-        parent (if replied-id
-                 (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str replied-id})
-                 (if retweeted-status-id
-                   (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str retweeted-status-id})
-                   nil))]
-    (if parent
-      (trace-parent parent (into origins [(:_id parent)]))
-      origins)))
-
-
-(defn store-url [{:keys [article record ts source]}]
-  (mc/insert-and-return
-   (:db @mongo-state)
-   "urls"
-   {:tweet record
-    :article article
-    :source source
-    :ts ts}))
-
-
-(defn store-origin [{:keys [article record ts source ancestors root]}]
-  (mc/insert-and-return
-   (:db @mongo-state)
-   "origins"
-   {:tweet record
-    :article article
-    :source source
-    :ancestors ancestors
-    :root root
-    :ts ts}))
-
-
-(defn store-article [{:keys [url content-type ts] :as expanded-url}]
-  (let [raw-html (slurp url)
-        html-title (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)]
-    (mc/insert-and-return
-     (:db @mongo-state)
-     "articles"
-     {:url url
-      :title html-title
-      :content-type content-type
-      :html raw-html
-      :ts ts})))
-
-
-(defn store
-  "Stores the given tweet in mongodb"
-  [tweet]
-  (let [oid (ObjectId.)
-        doc (update-in tweet [:created_at] (fn [x] (f/parse (:custom-formatter @mongo-state) x)))
-        record (from-db-object (mc/insert-and-return (:db @mongo-state) "tweets" (merge doc {:_id oid})) true)
-        ts (:created_at record)
-        source ((:news-accounts @mongo-state) (-> record :user :screen_name))
-        record-urls (-> record :entities :urls)
-        expanded-urls (if (empty? record-urls)
-                        nil
-                        (map #(let [expanded-url (expand-url (:expanded_url %))]
-                                (if (:url expand-url)
-                                  expanded-url
-                                  (assoc expanded-url :url (:expanded_url %)))) record-urls))
-        articles (if (nil? expanded-urls)
-                   nil
-                   (map #(assoc % :article (-> (mc/find-one-as-map (:db @mongo-state) "articles" {:url (:url %)}) :_id)) expanded-urls))
-        ancestors (trace-parent record [])]
-    (if (nil? articles)
-      (do
-        (store-origin {:record oid :ts ts :source source :ancestors ancestors :article nil :root (last ancestors)})
-        nil)
-      (doall
-       (map
-        #(if (:article %)
-           (do (store-origin (assoc % :record oid :ts ts :source source :ancestors ancestors :root (last ancestors)))
-               nil)
-           (let [article (store-article (assoc % :ts ts))
-                 origin (store-origin (assoc % :article (:_id article) :record oid :ts ts :source source :ancestors ancestors :root (last ancestors)))]
-             {:article (update-in article [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))) :origin (str (:_id origin))}))
-        articles)))))
-
-
 ;;todo check if id exists in database
 (defn read-data
   "Reads in json data from given path and stores it"
@@ -184,7 +52,7 @@
 (defn get-recent-tweets
   "Retrieve the last 25*n tweets"
   [n]
-  (->> (mc/find (:db @mongo-state) "tweets")
+  (->> (mc/find db "tweets")
        seq
        (take-last (+ (* n 25) 100))
        (take 25)
@@ -192,22 +60,22 @@
 
 
 (defn get-news-frequencies []
-  (vec (pmap #(vec [% (mc/count (:db @mongo-state) "tweets" {:user.screen_name %
-                                                             :created_at {$gt (t/date-time 2014 7 1)}})]) (:news-accounts @mongo-state))))
+  (vec (pmap #(vec [% (mc/count db "tweets" {:user.screen_name %
+                                                             :created_at {$gt (t/date-time 2014 7 1)}})]) news-accounts)))
 
 
 (defn get-tweet-count []
-  (mc/count (:db @mongo-state) "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
+  (mc/count db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
 
 
 (defn get-tweets-from-date [month day]
-  (mc/find-maps (:db @mongo-state) "tweets"
+  (mc/find-maps db "tweets"
                 {:created_at {$gt (t/date-time 2014 month day 0 0 0 0)
                               $lte (t/date-time 2014 month day 23 59 59 999)}}))
 
 
 (defn get-articles-from-date [month day]
-  (mc/find-maps (:db @mongo-state) "articles"
+  (mc/find-maps db "articles"
                 {:ts {$gt (t/date-time 2014 month day 0 0 0 0)
                       $lte (t/date-time 2014 month day 23 59 59 999)}}))
 
@@ -221,16 +89,16 @@
 
 
 (defn compute-diffusion [user]
-  (->> (mc/count (:db @mongo-state) "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
+  (->> (mc/count db "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
                                                            {"retweeted_status.user.screen_name" user}
                                                            {"in_reply_to_screen_name" user}]}
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
 
 (defn compute-tweet-diffusion [tweet-id parents]
-  (let [tweet (mc/find-one-as-map (:db @mongo-state) "tweets" {:id_str tweet-id})
+  (let [tweet (mc/find-one-as-map db "tweets" {:id_str tweet-id})
         neighbor-tweets (->> (mc/find-maps
-                              (:db @mongo-state)
+                              db
                               "tweets"
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
@@ -242,7 +110,7 @@
 
 
 (defn get-news-diffusion []
-  (mapv #(vec [% (compute-diffusion %)]) (:news-accounts @mongo-state)))
+  (mapv #(vec [% (compute-diffusion %)]) news-accounts))
 
 
 (defn get-month-distribution [month]
@@ -253,7 +121,7 @@
         (into {} [[:date (str (t/date-time 2014 month day))]
                   [:count
                    (mc/count
-                    (:db @mongo-state)
+                    db
                     "tweets"
                     {:created_at
                      {$gt (t/date-time 2014 month day 0 0 0 0)
@@ -266,7 +134,7 @@
   [m d]
   (->> (get-tweets-from-date m d)
        (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:created_at] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+       (pmap #(update-in % [:created_at] (fn [x] (f/unparse custom-formatter x))))
        (pmap str)
        (clojure.string/join "\n")))
 
@@ -275,25 +143,25 @@
   [m d]
   (->> (get-articles-from-date m d)
        (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:ts] (fn [x] (f/unparse (:custom-formatter @mongo-state) x))))
+       (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
        (pmap str)
        (clojure.string/join "\n")))
 
 
 (defn get-recent-articles []
-  (->> (mc/find-maps (:db @mongo-state) "articles" {:ts {$gt (t/date-time 2014 7 20)}})
+  (->> (mc/find-maps db "articles" {:ts {$gt (t/date-time 2014 7 20)}})
        (pmap #(dissoc % :html :_id))
        vec))
 
 
 (defn get-articles-count []
-  (mc/count (:db @mongo-state) "articles"))
+  (mc/count db "articles"))
 
 
 (defn find-source
   "Find the source of a given article"
   [id]
-  (mc/find-maps (:db @mongo-state) "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
+  (mc/find-maps db "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
 
 
 (defn spread
@@ -301,7 +169,7 @@
   [tweet]
   (let [tweet-id (:id_str tweet)
         neighbor-tweets (->> (mc/find-maps
-                              (:db @mongo-state)
+                              db
                               "tweets"
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
@@ -313,18 +181,18 @@
   "Create the impact graph using clojure zippers"
   [origin]
   (let [article (if (:article origin)
-                      (mc/find-map-by-id (:db @mongo-state) "articles" (:article origin))
+                      (mc/find-map-by-id db "articles" (:article origin))
                       nil)
-        tweet (mc/find-map-by-id (:db @mongo-state) "tweets" (:tweet origin))]
+        tweet (mc/find-map-by-id db "tweets" (:tweet origin))]
     (let [related-origins (if article
-                             (->> (mc/find-maps (:db @mongo-state) "origins" {:article  (:_id article)} [:tweet])
+                             (->> (mc/find-maps db "origins" {:article  (:_id article)} [:tweet])
                                   (remove #(= (:_id %) (:_id origin)))
                                   (pmap :tweet)
-                                  (pmap #(mc/find-map-by-id (:db @mongo-state) "tweets" %))
+                                  (pmap #(mc/find-map-by-id db "tweets" %))
                                   (filter #(or (nil? (-> % :retweeted_status :id_str)) (= (-> % :retweeted_status :id_str) (:id_str tweet)))))
                              nil)
           related-tweets (->> (mc/find-maps
-                                (:db @mongo-state)
+                                db
                                 "tweets"
                                 {$and [{$or [{"retweeted_status.id_str" (:id_str tweet)}
                                              {"in_reply_to_status_id_str" (:id_str tweet)}]}
@@ -414,13 +282,14 @@
 
 
 (defn example-graph []
-  (let [tree (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
+  (let [tree (compute-impact-graph (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
     {:graph (simplify-graph tree)
-     :height (tree-height tree)}))
+     :height (tree-height tree)
+     :size (compute-dfs tree)}))
 
 
 (defn random-graph []
-  (let [tree (-> (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}) rand-nth compute-impact-graph)]
+  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-graph)]
     {:graph (simplify-graph tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
@@ -430,16 +299,16 @@
 
   ;; TODO update on server
   (time
-   (doseq [x (monger.collection/find-maps (:db @mongo-state) "tweets")]
+   (doseq [x (monger.collection/find-maps db "tweets")]
      (mc/update-by-id
-      (:db @mongo-state)
+      db
       "tweets"
       (:_id x)
-      (update-in x [:created_at] #(f/parse (:custom-formatter @mongo-state) (:created_at %))))))
+      (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))))))
 
-  (def articles (mc/find-maps (:db @mongo-state) "origins" {:source {$in (:news-accounts @mongo-state)}}))
+  (def articles (mc/find-maps db "origins" {:source {$in news-accounts}}))
 
-  (def example-graph (compute-impact-graph (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53da170d657a10b9f098be86"))))
+  (def example-graph (compute-impact-graph (mc/find-map-by-id db "origins" (ObjectId. "53da170d657a10b9f098be86"))))
 
   (-> (let [tree (-> articles rand-nth compute-impact-graph)]
         [(simplify-graph tree)
@@ -448,7 +317,7 @@
 
   (count articles)
 
-  (-> (mc/find-map-by-id (:db @mongo-state) "origins" (ObjectId. "53de1541657a439ad20d6859"))
+  (-> (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859"))
       compute-impact-graph
       simplify-graph
       clojure.pprint/pprint)
@@ -457,7 +326,5 @@
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
-
-  (pprint (random-graph))
 
 )

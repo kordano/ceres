@@ -7,7 +7,8 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.curator :refer [get-recent-articles store get-articles-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
+            [ceres.collector :refer [store] :as collector]
+            [ceres.curator :refer [get-recent-articles get-articles-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -25,7 +26,9 @@
   [:#d3-js] (set-attr "src" "static/d3/d3.min.js")
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
-(defn format-article [article]
+(defn format-article
+  "Formats a given article record removing html content and content-type"
+  [article]
   (-> (update-in article [:article] #(dissoc % :html :content-type))
       (update-in [:article :_id] str)))
 
@@ -136,10 +139,11 @@
   (timbre/set-config! [:appenders :spit :enabled?] true)
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
-  (when (:init @server-state)
+  (when (:init? @server-state)
     (curator/init-mongo))
   (info @server-state)
-  (run-server (site #'all-routes) {:port (:port @server-state) :join? false})
+  (when (:http-server? @server-state)
+    (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
     (start-filter-stream follow track handler credentials)))
 
@@ -163,4 +167,19 @@
   (stop-server)
 
 
-)
+  ;; example server-config
+  {:port 8082
+   :build :dev
+   :logfile "/home/konny/projects/ceres/resources/ceres.log"
+   :init? false
+   :http-server? true
+   :app
+   {:credentials
+    {:consumer-key "????"
+     :consumer-secret "????"
+     :access-token "????"
+     :access-token-secret "????"}
+    :follow [114508061 18016521 5734902 40227292 2834511 9204502 15071293 19232587 15243812 8720562 1101354170 15738602 18774524 5494392]
+    :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE" "@BILD" "@DerWesten" "@ntvde" "@tazgezwitscher" "@welt" "@ZDFheute" "@N24_de" "@sternde" "@focusonline"]}}
+
+  )
