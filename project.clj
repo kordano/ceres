@@ -19,7 +19,6 @@
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
 
-                 [net.drib/strokes "0.5.1"]
                  [gezwitscher "0.1.1-SNAPSHOT"]
                  [com.novemberain/monger "2.0.0-rc1"]
                  [incanter "1.5.5"]
@@ -30,6 +29,7 @@
                  [prismatic/dommy "0.1.2"]
                  [net.drib/strokes "0.5.1"]
 
+                 [clojurewerkz/quartzite "1.3.0"]
                  [com.cemerick/piggieback "0.1.3"]
                  [weasel "0.2.0"]
                  [com.taoensso/timbre "3.2.1"]]

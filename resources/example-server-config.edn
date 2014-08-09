@@ -4,6 +4,8 @@
  :logfile "/path/to/logfile" ;; if logging activated this is the file the log is written to
  :init? false ;; if the server runs for the first time, mongodb indices have to be build
  :http-server? true ;; decide wether the http-server is needed
+ :backup? true
+ :backup-folder "/path/to/backup-folder"
  :app ;; twitter related configs
  {:credentials ;; refer to twitter dev site
   {:consumer-key "????"

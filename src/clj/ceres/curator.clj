@@ -10,20 +10,25 @@
             [clojure.walk :as walk]
             [clojure.zip :as zip]
             [clj-time.core :as t]
+            [clj-time.format :as f]
             [clojure.pprint :refer [pprint]]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
+
 (timbre/refer-timbre)
+
 
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
+
 
 (def stopwords
   (into #{}
         (clojure.string/split
              "aber,als,am,an,auch,auf,aus,bei,bin,bis,ist,da,dadurch,daher,darum,das,daß,dass,dein,deine,dem,den,der,des,dessen,deshalb,die,dies,dieser,dieses,doch,dort,du,durch,ein,eine,einem,einen,einer,eines,er,es,euer,eure,für,habe,hast,hat,haben,habt,hatte,hatten,hattest,hattet,hier,hinter,ich,ihr,ihre,im,in,ist,ja,jede,jedem,jeden,jeder,jedes,jener,jenes,jetzt,kann,kannst,können,könnt,machen,mein,meine,mit,muß,mußt,musst,müssen,müßt,nach,nachdem,nein,ncht,nun,oder,seid,sein,seine,sich,sie,sind,soll,sollen,sollst,sollt,sonst,soweit,sowie,und,unser,unsere,unter,vom,von,vor,wann,warum,was,weiter,weitere,wenn,wer,werde,werden,werdet,weshalb,wie,wieder,wieso,wir,wird,wirst,wo,woher,wohin,zu,zum,zur,über,rt"
              #",")))
+
 
 (def months
   [(range 1 32)
@@ -40,52 +45,33 @@
    (range 1 32)])
 
 
-;;todo check if id exists in database
-(defn read-data
-  "Reads in json data from given path and stores it"
-  [path]
-  (doall (map #(let [data (json/read-str % :key-fn keyword)]
-                 (println "Importing " (:id data))
-                 (store data)) (split (slurp path) #"\n"))))
-
-
-(defn get-recent-tweets
-  "Retrieve the last 25*n tweets"
-  [n]
-  (->> (mc/find db "tweets")
-       seq
-       (take-last (+ (* n 25) 100))
-       (take 25)
-       (mapv #(from-db-object % true))))
-
+;; --- DATA MINING ---
 
 (defn get-news-frequencies []
-  (vec (pmap #(vec [% (mc/count db "tweets" {:user.screen_name %
-                                                             :created_at {$gt (t/date-time 2014 7 1)}})]) news-accounts)))
+  (vec
+   (pmap
+    #(-> [%
+          (mc/count
+           db "tweets"
+           {:user.screen_name %
+            :created_at {$gt (t/date-time 2014 7 1)}})])
+    news-accounts)))
 
 
 (defn get-tweet-count []
   (mc/count db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
 
 
-(defn get-tweets-from-date [month day]
+(defn get-tweets-from-date [year month day]
   (mc/find-maps db "tweets"
-                {:created_at {$gt (t/date-time 2014 month day 0 0 0 0)
-                              $lte (t/date-time 2014 month day 23 59 59 999)}}))
+                {:created_at {$gt (t/date-time year month day 0 0 0 0)
+                              $lte (t/date-time year month day 23 59 59 999)}}))
 
 
-(defn get-articles-from-date [month day]
+(defn get-articles-from-date [year month day]
   (mc/find-maps db "articles"
-                {:ts {$gt (t/date-time 2014 month day 0 0 0 0)
-                      $lte (t/date-time 2014 month day 23 59 59 999)}}))
-
-
-(defn get-hashtag-frequencies [coll]
-  (->> coll
-       (map #(from-db-object % true))
-       (map #(map (fn [hashtag] (hashtag :text)) (-> % :entities :hashtags)))
-       flatten
-       frequencies))
+                {:ts {$gt (t/date-time year month day 0 0 0 0)
+                      $lte (t/date-time year month day 23 59 59 999)}}))
 
 
 (defn compute-diffusion [user]
@@ -127,26 +113,6 @@
                      {$gt (t/date-time 2014 month day 0 0 0 0)
                       $lte (t/date-time 2014 month day 23 59 59 999)}})]]))
       day-range))))
-
-
-(defn export-edn
-  "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
-  [m d]
-  (->> (get-tweets-from-date m d)
-       (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:created_at] (fn [x] (f/unparse custom-formatter x))))
-       (pmap str)
-       (clojure.string/join "\n")))
-
-
-(defn export-articles
-  [m d]
-  (->> (get-articles-from-date m d)
-       (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
-       (pmap str)
-       (clojure.string/join "\n")))
-
 
 (defn get-recent-articles []
   (->> (mc/find-maps db "articles" {:ts {$gt (t/date-time 2014 7 20)}})
@@ -293,6 +259,46 @@
     {:graph (simplify-graph tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
+
+
+;; --- DATA EXPORT/IMPORT ---
+
+;;todo check if id exists in database
+(defn read-data
+  "Reads in json data from given path and stores it"
+  [path]
+  (doall (map #(let [data (json/read-str % :key-fn keyword)]
+                 (println "Importing " (:id data))
+                 (store data)) (split (slurp path) #"\n"))))
+
+
+(defn export-tweets
+  "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
+  [y m d]
+  (->> (get-tweets-from-date y m d)
+       (pmap #(update-in % [:_id] str))
+       (pmap #(update-in % [:created_at] (fn [x] (f/unparse custom-formatter x))))
+       (pmap str)
+       (clojure.string/join "\n")))
+
+
+(defn backup-tweets [folder-path]
+  (let [date (t/minus (t/today) (t/days 1))
+        y (t/year date)
+        m (t/month date)
+        d (t/day date)
+        data (export-tweets y m d)
+        file-path (str folder-path "/tweets-" y "-" m "-" d ".edn")]
+    (spit file-path data)))
+
+
+(defn export-articles
+  [y m d]
+  (->> (get-articles-from-date y m d)
+       (pmap #(update-in % [:_id] str))
+       (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
+       (pmap str)
+       (clojure.string/join "\n")))
 
 
 (comment

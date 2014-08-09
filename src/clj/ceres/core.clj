@@ -8,7 +8,7 @@
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store] :as collector]
-            [ceres.curator :refer [get-recent-articles get-articles-count export-edn get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
+            [ceres.curator :refer [get-recent-articles get-articles-count export-tweets get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -111,10 +111,10 @@
 (defn handle-export
   "Parse date from query and create edn-string"
   [query type]
-  (let [[m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
+  (let [[y m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
     (case type
-      :tweets (export-edn m d)
-      :articles (curator/export-articles m d)
+      :tweets (export-tweets y m d)
+      :articles (curator/export-articles y m d)
       "N/A")))
 
 
@@ -140,7 +140,7 @@
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
   (when (:init? @server-state)
-    (curator/init-mongo))
+    (collector/init-mongo))
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
