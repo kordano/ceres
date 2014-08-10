@@ -8,7 +8,7 @@
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store] :as collector]
-            [ceres.curator :refer [get-recent-articles get-articles-count export-tweets get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
+            [ceres.curator :refer [get-recent-articles get-articles-count get-news-diffusion get-news-frequencies] :as curator]
             [ceres.executor :refer [start-executor]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
@@ -109,27 +109,11 @@
        (assoc-in [:app :recent-articles] []))))
 
 
-(defn handle-export
-  "Parse date from query and create edn-string"
-  [query type]
-  (let [[y m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
-    (case type
-      :tweets (export-tweets y m d)
-      :articles (str (curator/export-articles y m d true)
-                     (curator/export-articles y m d false))
-      "N/A")))
-
 
 (defroutes all-routes
   (resources "/")
 
   (GET "/tweets/ws" [] tweet-handler)
-
-  (GET "/tweets/export" request (let [query-params (-> request :query-params)]
-                                  (handle-export query-params :tweets)))
-
-  (GET "/articles/export" request (let [query-params (-> request :query-params)]
-                                    (handle-export query-params :articles)))
 
   (GET "/*" [] (if (= (:build @server-state) :prod)
                  (static-page)
@@ -170,8 +154,6 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
-
-  @server-state
 
 
   )
