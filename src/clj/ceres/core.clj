@@ -9,6 +9,7 @@
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store] :as collector]
             [ceres.curator :refer [get-recent-articles get-articles-count export-tweets get-news-diffusion get-news-frequencies get-month-distribution] :as curator]
+            [ceres.executor :refer [start-executor]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
@@ -114,7 +115,8 @@
   (let [[y m d] (mapv read-string (clojure.string/split (get query "date") #"-" ))]
     (case type
       :tweets (export-tweets y m d)
-      :articles (curator/export-articles y m d)
+      :articles (str (curator/export-articles y m d true)
+                     (curator/export-articles y m d false))
       "N/A")))
 
 
@@ -145,7 +147,9 @@
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
-    (start-filter-stream follow track handler credentials)))
+    (start-filter-stream follow track handler credentials))
+  (start-executor (:backup-folder @server-state))
+  )
 
 
 (comment
@@ -165,6 +169,5 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
-
 
   )

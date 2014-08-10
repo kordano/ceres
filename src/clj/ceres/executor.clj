@@ -6,9 +6,17 @@
             [ceres.curator :as curator]
             [taoensso.timbre :as timbre])
   (:use [clojurewerkz.quartzite.jobs :only [defjob]]
-        [clojurewerkz.quartzite.schedule.daily-interval :only [schedule with-repeat-count with-interval-in-days with-interval-in-minutes time-of-day on-every-day]]))
+        [clojurewerkz.quartzite.schedule.daily-interval :only [schedule with-repeat-count with-interval-in-days with-interval-in-minutes time-of-day every-day starting-daily-at ending-daily-at]]))
 
 (timbre/refer-timbre)
+
+
+(defjob ArticlesBackup
+  [ctx]
+  (let [path (get (qc/from-job-data ctx) "folder-path")]
+      (info "Writing articles backup...")
+    (curator/backup-articles path)))
+
 
 (defjob TweetBackup
   [ctx]
@@ -17,49 +25,42 @@
     (curator/backup-tweets path)))
 
 
-(defn start-executor [path]
-  (swap! executor-state #(assoc %1 :backup-folder %2) path)
-  (qs/initialize)
-  (qs/start)
+(defn tweets-backup-schedule [path]
   (let [job (j/build
              (j/of-type TweetBackup)
              (j/using-job-data {"folder-path" path})
-             (j/with-identity (j/key "jobs.tweetscount.1")))
+             (j/with-identity (j/key "jobs.tweetsbackup.1")))
         tk (t/key "triggers.1")
         trigger (t/build
                  (t/with-identity tk)
                  (t/start-now)
                  (t/with-schedule
                    (schedule
-                    (starting-daily-at (time-of-day 2 00 00)))))]
+                    (every-day)
+                    (starting-daily-at (time-of-day 3 00 00))
+                    (ending-daily-at (time-of-day 3 00 01)))))]
     (qs/schedule job trigger)))
 
 
-(comment
-  (qs/initialize)
-
-  (qs/start)
-
-  (start-executor "/home/konny/data")
-
+(defn articles-backup-schedule [path]
   (let [job (j/build
-              (j/of-type TweetsCount)
-              (j/with-identity (j/key "jobs.tweetscount.1")))
+             (j/of-type ArticlesBackup)
+             (j/using-job-data {"folder-path" path})
+             (j/with-identity (j/key "jobs.articlesbackup.1")))
+        tk (t/key "triggers.2")
         trigger (t/build
-                  (t/with-identity (t/key "triggers.1"))
-                  (t/start-now)
-                  (t/with-schedule (schedule
-                                     (with-repeat-count 60)
-                                     (with-interval-in-seconds 10))))]
-    (qs/schedule job trigger))
-
-  (qs/shutdown)
-
-  (schedule (with-interval-in-days 1) (time-of-day 2 00 00))
+                 (t/with-identity tk)
+                 (t/start-now)
+                 (t/with-schedule
+                   (schedule
+                    (every-day)
+                    (starting-daily-at (time-of-day 3 05 00))
+                    (ending-daily-at (time-of-day 3 05 01)))))]
+    (qs/schedule job trigger)))
 
 
-  (every-day)
-
-  (time-of-day 16 00 00)
-
-  )
+(defn start-executor [path]
+  (qs/initialize)
+  (qs/start)
+  (tweets-backup-schedule)
+  (articles-backup-schedule))

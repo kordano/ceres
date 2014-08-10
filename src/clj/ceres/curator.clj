@@ -68,10 +68,10 @@
                               $lte (t/date-time year month day 23 59 59 999)}}))
 
 
-(defn get-articles-from-date [year month day]
+(defn get-articles-from-date [year month day morning?]
   (mc/find-maps db "articles"
-                {:ts {$gt (t/date-time year month day 0 0 0 0)
-                      $lte (t/date-time year month day 23 59 59 999)}}))
+                {:ts {$gt (t/date-time year month day (if morning? 0 12) 0 0 0)
+                      $lte (t/date-time year month day (if morning? 11 23) 59 59 999)}}))
 
 
 (defn compute-diffusion [user]
@@ -293,13 +293,25 @@
 
 
 (defn export-articles
-  [y m d]
-  (->> (get-articles-from-date y m d)
+  [y m d t]
+  (->> (get-articles-from-date y m d t)
        (pmap #(update-in % [:_id] str))
        (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
        (pmap str)
        (clojure.string/join "\n")))
 
+(defn backup-articles [folder-path]
+  (let [date (t/minus (t/today) (t/days 1))
+        y (t/year date)
+        m (t/month date)
+        d (t/day date)
+        am-data (export-articles y m d true)
+        pm-data (export-articles y m d false)
+        am-file-path (str folder-path "/articles-" y "-" m "-" d "-am.edn")
+        pm-file-path (str folder-path "/articles-" y "-" m "-" d "-pm.edn")]
+    (doall
+     (spit am-file-path am-data)
+     (spit pm-file-path pm-data))))
 
 (comment
 
