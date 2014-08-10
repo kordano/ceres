@@ -3,29 +3,28 @@
             [clojurewerkz.quartzite.triggers :as t]
             [clojurewerkz.quartzite.jobs :as j]
             [clojurewerkz.quartzite.conversion :as qc]
+            [clojurewerkz.quartzite.jobs :refer [defjob]]
+            [clojurewerkz.quartzite.schedule.daily-interval :refer [schedule with-repeat-count with-interval-in-days with-interval-in-minutes time-of-day every-day starting-daily-at ending-daily-at]]
             [ceres.curator :as curator]
-            [taoensso.timbre :as timbre])
-  (:use [clojurewerkz.quartzite.jobs :only [defjob]]
-        [clojurewerkz.quartzite.schedule.daily-interval :only [schedule with-repeat-count with-interval-in-days with-interval-in-minutes time-of-day every-day starting-daily-at ending-daily-at]]))
+            [taoensso.timbre :as timbre]))
 
 (timbre/refer-timbre)
 
-
-(defjob ArticlesBackup
-  [ctx]
+(defjob ArticlesBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing articles backup...")
     (curator/backup-articles path)))
 
 
-(defjob TweetBackup
-  [ctx]
+(defjob TweetBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing tweets backup...")
     (curator/backup-tweets path)))
 
 
-(defn tweets-backup-schedule [path]
+(defn tweets-backup-schedule
+  "Create a schedule to backup the tweets at 3 am"
+  [path]
   (let [job (j/build
              (j/of-type TweetBackup)
              (j/using-job-data {"folder-path" path})
@@ -42,7 +41,9 @@
     (qs/schedule job trigger)))
 
 
-(defn articles-backup-schedule [path]
+(defn articles-backup-schedule
+  "Create a schedule to backup the articles at 3.05 am"
+  [path]
   (let [job (j/build
              (j/of-type ArticlesBackup)
              (j/using-job-data {"folder-path" path})
@@ -59,8 +60,10 @@
     (qs/schedule job trigger)))
 
 
-(defn start-executor [path]
+(defn start-executor
+  "Run the schedules"
+  [path]
   (qs/initialize)
   (qs/start)
-  (tweets-backup-schedule)
-  (articles-backup-schedule))
+  (tweets-backup-schedule path)
+  (articles-backup-schedule path))

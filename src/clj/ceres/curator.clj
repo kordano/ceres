@@ -11,6 +11,8 @@
             [clojure.zip :as zip]
             [clj-time.core :as t]
             [clj-time.format :as f]
+            [clj-time.coerce :as c]
+            [clojure.java.shell :refer [sh]]
             [clojure.pprint :refer [pprint]]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
@@ -261,57 +263,33 @@
      :size (compute-dfs tree)}))
 
 
-;; --- DATA EXPORT/IMPORT ---
-
-;;todo check if id exists in database
-(defn read-data
-  "Reads in json data from given path and stores it"
-  [path]
-  (doall (map #(let [data (json/read-str % :key-fn keyword)]
-                 (println "Importing " (:id data))
-                 (store data)) (split (slurp path) #"\n"))))
-
-
-(defn export-tweets
-  "Export all collected tweets from a specific date as edn file. Read https://github.com/edn-format/edn for edn format details."
-  [y m d]
-  (->> (get-tweets-from-date y m d)
-       (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:created_at] (fn [x] (f/unparse custom-formatter x))))
-       (pmap str)
-       (clojure.string/join "\n")))
-
+;; --- MONGO DATA EXPORT/IMPORT ---
 
 (defn backup-tweets [folder-path]
-  (let [date (t/minus (t/today) (t/days 1))
-        y (t/year date)
-        m (t/month date)
-        d (t/day date)
-        data (export-tweets y m d)
-        file-path (str folder-path "/tweets-" y "-" m "-" d ".edn")]
-    (spit file-path data)))
+  (let [yesterday (t/minus (t/today) (t/days 1))
+        file-path (str folder-path
+                       "/tweets-" (t/year yesterday)
+                       "-" (t/month yesterday)
+                       "-" (t/day yesterday) ".json")]
+      (sh "mongoexport"
+          "--db" "athena"
+          "--collection" "tweets"
+          "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+          "--out" file-path)))
 
-
-(defn export-articles
-  [y m d t]
-  (->> (get-articles-from-date y m d t)
-       (pmap #(update-in % [:_id] str))
-       (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
-       (pmap str)
-       (clojure.string/join "\n")))
 
 (defn backup-articles [folder-path]
-  (let [date (t/minus (t/today) (t/days 1))
-        y (t/year date)
-        m (t/month date)
-        d (t/day date)
-        am-data (export-articles y m d true)
-        pm-data (export-articles y m d false)
-        am-file-path (str folder-path "/articles-" y "-" m "-" d "-am.edn")
-        pm-file-path (str folder-path "/articles-" y "-" m "-" d "-pm.edn")]
-    (doall
-     (spit am-file-path am-data)
-     (spit pm-file-path pm-data))))
+  (let [yesterday (t/minus (t/today) (t/days 1))
+        file-path (str folder-path
+                       "/articles-" (t/year yesterday)
+                       "-" (t/month yesterday)
+                       "-" (t/day yesterday) ".json")]
+      (sh "mongoexport"
+          "--db" "athena"
+          "--collection" "tweets"
+          "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+          "--out" file-path)))
+
 
 (comment
 
@@ -344,5 +322,32 @@
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
+
+  (mc/count db "tweets")
+
+  (->>
+      (pmap #(update-in % [:_id] str))
+      (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
+      (pmap str)
+      (clojure.string/join "\n")
+      time)
+
+  (println (str ))
+  (println (str ))
+
+  (sh "mongoexport"
+      "--db" "athena"
+      "--collection" "tweets"
+      "--query" (str
+                 "{created_at : {$gte : new Date("
+                 (c/to-long (t/minus (t/today) (t/days 1)))
+                 "), $lt : new Date("
+                 (c/to-long (t/today))
+                 ")}}")
+      "--out" "/home/konny/data/now.json")
+
+  (-
+   (c/to-long (t/date-time 2014 8 10 ))
+   (c/to-long (t/date-time 2014 8 11 )))
 
 )
