@@ -271,11 +271,13 @@
                        "/tweets-" (t/year yesterday)
                        "-" (t/month yesterday)
                        "-" (t/day yesterday) ".json")]
-      (sh "mongoexport"
-          "--db" "athena"
-          "--collection" "tweets"
-          "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-          "--out" file-path)))
+    (sh "mongoexport"
+        "--port" "27017"
+        "--host" "$DB_PORT_27017_TCP_ADDR"
+        "--db" "athena"
+        "--collection" "tweets"
+        "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+        "--out" file-path)))
 
 
 (defn backup-articles [folder-path]
@@ -284,11 +286,13 @@
                        "/articles-" (t/year yesterday)
                        "-" (t/month yesterday)
                        "-" (t/day yesterday) ".json")]
-      (sh "mongoexport"
-          "--db" "athena"
-          "--collection" "tweets"
-          "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-          "--out" file-path)))
+    (sh "mongoexport"
+        "--port" "27017"
+        "--host" "$DB_PORT_27017_TCP_ADDR"
+        "--db" "athena"
+        "--collection" "articles"
+        "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+        "--out" file-path)))
 
 
 (comment
