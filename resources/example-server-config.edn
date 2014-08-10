@@ -1,12 +1,14 @@
 {:port 8082
  :build :dev ;; use :prod for static paths and optimized js files otherwise :dev
+ :version 0.0 ;; currently deployed version
+ :date "1970-01-01" ;; date of deployment
  :logging? true
  :logfile "/path/to/logfile" ;; if logging activated this is the file the log is written to
  :init? false ;; if the server runs for the first time, mongodb indices have to be build
  :http-server? true ;; decide wether the http-server is needed
  :backup? true
  :backup-folder "/path/to/backup-folder"
- :app ;; twitter related configs
+ :app ;; twitter app related configs
  {:credentials ;; refer to twitter dev site
   {:consumer-key "????"
    :consumer-secret "????"
