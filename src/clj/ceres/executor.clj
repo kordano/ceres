@@ -19,8 +19,12 @@
 (defjob TweetBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing tweets backup...")
-    (curator/backup-tweets path)))
+      (curator/backup-tweets path)))
 
+(defjob OriginBackup [ctx]
+  (let [path (get (qc/from-job-data ctx) "folder-path")]
+      (info "Writing tweets backup...")
+    (curator/backup-origins path)))
 
 (defn tweets-backup-schedule
   "Create a schedule to backup the tweets at 3 am"
@@ -59,6 +63,23 @@
                     (ending-daily-at (time-of-day 3 05 01)))))]
     (qs/schedule job trigger)))
 
+(defn origins-backup-schedule
+  "Create a schedule to backup the articles at 3.10 am"
+  [path]
+  (let [job (j/build
+             (j/of-type OriginBackup)
+             (j/using-job-data {"folder-path" path})
+             (j/with-identity (j/key "jobs.originsbackup.1")))
+        tk (t/key "triggers.2")
+        trigger (t/build
+                 (t/with-identity tk)
+                 (t/start-now)
+                 (t/with-schedule
+                   (schedule
+                    (every-day)
+                    (starting-daily-at (time-of-day 3 10 00))
+                    (ending-daily-at (time-of-day 3 10 01)))))]
+    (qs/schedule job trigger)))
 
 (defn start-executor
   "Run the schedules"
@@ -66,4 +87,5 @@
   (qs/initialize)
   (qs/start)
   (tweets-backup-schedule path)
-  (articles-backup-schedule path))
+  (articles-backup-schedule path)
+  (origins-backup-schedule path))

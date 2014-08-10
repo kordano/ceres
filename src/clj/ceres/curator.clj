@@ -295,6 +295,21 @@
         "--out" file-path)))
 
 
+(defn backup-origins [folder-path]
+  (let [yesterday (t/minus (t/today) (t/days 1))
+        file-path (str folder-path
+                       "/origins-" (t/year yesterday)
+                       "-" (t/month yesterday)
+                       "-" (t/day yesterday) ".json")]
+    (sh "mongoexport"
+        "--port" "27017"
+        "--host" "$DB_PORT_27017_TCP_ADDR"
+        "--db" "athena"
+        "--collection" "origins"
+        "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+        "--out" file-path)))
+
+
 (comment
 
   ;; TODO update on server
@@ -336,22 +351,6 @@
       (clojure.string/join "\n")
       time)
 
-  (println (str ))
-  (println (str ))
 
-  (sh "mongoexport"
-      "--db" "athena"
-      "--collection" "tweets"
-      "--query" (str
-                 "{created_at : {$gte : new Date("
-                 (c/to-long (t/minus (t/today) (t/days 1)))
-                 "), $lt : new Date("
-                 (c/to-long (t/today))
-                 ")}}")
-      "--out" "/home/konny/data/now.json")
-
-  (-
-   (c/to-long (t/date-time 2014 8 10 ))
-   (c/to-long (t/date-time 2014 8 11 )))
 
 )

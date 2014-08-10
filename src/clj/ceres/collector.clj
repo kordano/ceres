@@ -106,9 +106,7 @@
                    nil
                    (map #(assoc % :article (-> (mc/find-one-as-map db "articles" {:url (:url %)}) :_id)) expanded-urls))]
     (if (nil? articles)
-      (do
-        (store-origin {:record oid :ts ts :source source :article nil})
-        nil)
+      nil
       (doall
        (map
         #(if (:article %)
