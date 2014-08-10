@@ -148,7 +148,8 @@
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
     (start-filter-stream follow track handler credentials))
-  (start-executor (:backup-folder @server-state))
+  (when (:backup? @server-state)
+    (start-executor (:backup-folder @server-state)))
   )
 
 
@@ -169,5 +170,8 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
+
+  @server-state
+
 
   )
