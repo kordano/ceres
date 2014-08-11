@@ -126,22 +126,18 @@
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
   (when (:init? @server-state)
-    (doall
-     (collector/init-mongo)
-     (try
-       (curator/backup-articles (:backup-folder @server-state))
-       (catch Exception e (error (str "Caught exception" (.getMessage e)))))
-     (try
-       (curator/backup-origins (:backup-folder @server-state))
-       (catch Exception e (error (str "Caught exception" (.getMessage e)))))))
+    (collector/init-mongo)
+    (try (curator/backup-articles (:backup-folder @server-state))
+         (catch Exception e (error (str "Caught exception" (.getMessage e)))))
+    (try (curator/backup-origins (:backup-folder @server-state))
+         (catch Exception e (error (str "Caught exception" (.getMessage e))))))
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
   (let [{:keys [follow track handler credentials]} (:app @server-state)]
     (start-filter-stream follow track handler credentials))
   (when (:backup? @server-state)
-    (start-executor (:backup-folder @server-state)))
-  )
+    (start-executor (:backup-folder @server-state))))
 
 
 (comment
