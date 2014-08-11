@@ -8,7 +8,7 @@
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store] :as collector]
-            [ceres.curator :refer [get-recent-articles get-articles-count get-news-diffusion get-news-frequencies month-distribution] :as curator]
+            [ceres.curator :refer [get-recent-articles get-articles-count get-news-diffusion get-news-frequencies] :as curator]
             [ceres.executor :refer [start-executor]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
