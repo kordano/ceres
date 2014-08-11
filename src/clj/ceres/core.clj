@@ -129,7 +129,10 @@
     (doall
      (collector/init-mongo)
      (try
-       (curator/backup-tweets (:backup-folder @server-state))
+       (curator/backup-articles (:backup-folder @server-state))
+       (catch Exception e (error (str "Caught exception" (.getMessage e)))))
+     (try
+       (curator/backup-origins (:backup-folder @server-state))
        (catch Exception e (error (str "Caught exception" (.getMessage e)))))))
   (info @server-state)
   (when (:http-server? @server-state)
