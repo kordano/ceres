@@ -265,19 +265,36 @@
 
 ;; --- MONGO DATA EXPORT/IMPORT ---
 
+(defn backup [folder-path coll]
+  (let [yesterday (t/minus (t/today) (t/days 1))
+        file-path (str folder-path
+                       "/" coll
+                       "-"  (t/year yesterday)
+                       "-" (t/month yesterday)
+                       "-" (t/day yesterday) ".json")]
+    (sh "mongoexport"
+        "--port" "27017"
+        "--host" "$DB_PORT_27017_TCP_ADDR"
+        "--db" coll
+        "--collection" "tweets"
+        "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+        "--out" file-path)))
+
+
 (defn backup-tweets [folder-path]
   (let [yesterday (t/minus (t/today) (t/days 1))
         file-path (str folder-path
                        "/tweets-" (t/year yesterday)
                        "-" (t/month yesterday)
                        "-" (t/day yesterday) ".json")]
-    (sh "mongoexport"
-        "--port" "27017"
-        "--host" "$DB_PORT_27017_TCP_ADDR"
-        "--db" "athena"
-        "--collection" "tweets"
-        "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-        "--out" file-path)))
+    (info
+     (sh "mongoexport"
+         "--port" "27017"
+         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
+         "--db" "athena"
+         "--collection" "tweets"
+         "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+         "--out" file-path))))
 
 
 (defn backup-articles [folder-path]
@@ -286,13 +303,14 @@
                        "/articles-" (t/year yesterday)
                        "-" (t/month yesterday)
                        "-" (t/day yesterday) ".json")]
-    (sh "mongoexport"
-        "--port" "27017"
-        "--host" "$DB_PORT_27017_TCP_ADDR"
-        "--db" "athena"
-        "--collection" "articles"
-        "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-        "--out" file-path)))
+    (info
+     (sh "mongoexport"
+         "--port" "27017"
+         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
+         "--db" "athena"
+         "--collection" "articles"
+         "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+         "--out" file-path))))
 
 
 (defn backup-origins [folder-path]
@@ -301,13 +319,14 @@
                        "/origins-" (t/year yesterday)
                        "-" (t/month yesterday)
                        "-" (t/day yesterday) ".json")]
-    (sh "mongoexport"
-        "--port" "27017"
-        "--host" "$DB_PORT_27017_TCP_ADDR"
-        "--db" "athena"
-        "--collection" "origins"
-        "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-        "--out" file-path)))
+    (info
+     (sh "mongoexport"
+         "--port" "27017"
+         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
+         "--db" "athena"
+         "--collection" "origins"
+         "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+         "--out" file-path))))
 
 
 (comment
@@ -341,16 +360,6 @@
     (->> (pmap tree-height trees)
          frequencies
          clojure.pprint/pprint))
-
-  (mc/count db "tweets")
-
-  (->>
-      (pmap #(update-in % [:_id] str))
-      (pmap #(update-in % [:ts] (fn [x] (f/unparse custom-formatter x))))
-      (pmap str)
-      (clojure.string/join "\n")
-      time)
-
 
 
 )

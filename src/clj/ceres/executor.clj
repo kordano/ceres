@@ -70,7 +70,7 @@
              (j/of-type OriginBackup)
              (j/using-job-data {"folder-path" path})
              (j/with-identity (j/key "jobs.originsbackup.1")))
-        tk (t/key "triggers.2")
+        tk (t/key "triggers.3")
         trigger (t/build
                  (t/with-identity tk)
                  (t/start-now)
