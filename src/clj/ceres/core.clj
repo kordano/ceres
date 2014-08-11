@@ -126,10 +126,11 @@
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
   (when (:init? @server-state)
-    (collector/init-mongo)
-    (curator/backup-tweets (:backup-folder @server-state))
-    (curator/backup-articles (:backup-folder @server-state))
-    (curator/backup-origins (:backup-folder @server-state)))
+    (doall
+     (collector/init-mongo)
+     (try
+       (curator/backup-tweets (:backup-folder @server-state))
+       (catch Exception e (error (str "Caught exception" (.getMessage e)))))))
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
