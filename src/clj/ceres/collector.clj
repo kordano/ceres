@@ -23,7 +23,9 @@
 (def news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"} )
 
 
-(defn init-mongo []
+(defn init-mongo
+  "Define mongodb indices on first start"
+  []
   (do
     (mc/ensure-index db "articles" (array-map :ts 1))
     (mc/ensure-index db "origins" (array-map :ts 1))
@@ -54,17 +56,9 @@
                                     :content-type content-type})))))))
 
 
-(defn store-url [{:keys [article record ts source]}]
-  (mc/insert-and-return
-   db
-   "urls"
-   {:tweet record
-    :article article
-    :source source
-    :ts ts}))
-
-
-(defn store-origin [{:keys [article record ts source ancestors root]}]
+(defn store-origin
+  "Store relationship between article and tweet"
+  [{:keys [article record ts source]}]
   (mc/insert-and-return
    db
    "origins"
@@ -74,7 +68,9 @@
     :ts ts}))
 
 
-(defn store-article [{:keys [url content-type ts] :as expanded-url}]
+(defn store-article
+  "Fetch html document, extract title and store them"
+  [{:keys [url content-type ts] :as expanded-url}]
   (let [raw-html (slurp url)
         html-title (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)]
     (mc/insert-and-return
@@ -88,7 +84,7 @@
 
 
 (defn store
-  "Stores the given tweet in mongodb"
+  "Store the tweet"
   [tweet]
   (let [oid (ObjectId.)
         doc (update-in tweet [:created_at] (fn [x] (f/parse custom-formatter x)))
