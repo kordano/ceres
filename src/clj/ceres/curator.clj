@@ -13,13 +13,12 @@
             [clj-time.format :as f]
             [clj-time.coerce :as c]
             [clojure.java.shell :refer [sh]]
+            [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
             [clojure.pprint :refer [pprint]]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
-
 (timbre/refer-timbre)
-
 
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
@@ -32,24 +31,11 @@
              #",")))
 
 
-(def months
-  [(range 1 32)
-   (range 1 29)
-   (range 1 32)
-   (range 1 31)
-   (range 1 32)
-   (range 1 31)
-   (range 1 32)
-   (range 1 32)
-   (range 1 31)
-   (range 1 32)
-   (range 1 31)
-   (range 1 32)])
-
-
 ;; --- DATA MINING ---
 
-(defn get-news-frequencies []
+(defn get-news-frequencies
+  "Compute distribution of news tweets"
+  []
   (vec
    (pmap
     #(-> [%
@@ -60,26 +46,34 @@
     news-accounts)))
 
 
-(defn get-tweet-count []
+(defn get-tweet-count
+  "Compute overall tweet count"
+  []
   (mc/count db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
 
 
-(defn get-tweets-from-date [year month day]
+(defn get-tweets-from-date
+  "Fetch tweets from specific date"
+  [year month day]
   (mc/find-maps db "tweets"
                 {:created_at {$gt (t/date-time year month day 0 0 0 0)
                               $lte (t/date-time year month day 23 59 59 999)}}))
 
 
-(defn get-articles-from-date [year month day morning?]
+(defn get-articles-from-date
+  "Fetch articles from specific date"
+  [year month day morning?]
   (mc/find-maps db "articles"
                 {:ts {$gt (t/date-time year month day (if morning? 0 12) 0 0 0)
                       $lte (t/date-time year month day (if morning? 11 23) 59 59 999)}}))
 
 
-(defn compute-diffusion [user]
+(defn compute-diffusion
+  "Compute the distribution of news account mentions"
+  [user]
   (->> (mc/count db "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
-                                                           {"retweeted_status.user.screen_name" user}
-                                                           {"in_reply_to_screen_name" user}]}
+                                          {"retweeted_status.user.screen_name" user}
+                                          {"in_reply_to_screen_name" user}]}
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
 
@@ -101,28 +95,9 @@
   (mapv #(vec [% (compute-diffusion %)]) news-accounts))
 
 
-(defn get-month-distribution [month]
-  (let [day-range (months (dec month))]
-    (vec
-     (pmap
-      (fn [day]
-        (into {} [[:date (str (t/date-time 2014 month day))]
-                  [:count
-                   (mc/count
-                    db
-                    "tweets"
-                    {:created_at
-                     {$gt (t/date-time 2014 month day 0 0 0 0)
-                      $lte (t/date-time 2014 month day 23 59 59 999)}})]]))
-      day-range))))
-
-(defn get-recent-articles []
-  (->> (mc/find-maps db "articles" {:ts {$gt (t/date-time 2014 7 20)}})
-       (pmap #(dissoc % :html :_id))
-       vec))
-
-
-(defn get-articles-count []
+(defn get-articles-count
+  "Compute articles count"
+  []
   (mc/count db "articles"))
 
 
@@ -145,8 +120,8 @@
     (Reaction. tweet (vec (doall (pmap spread neighbor-tweets))))))
 
 
-(defn compute-impact-graph
-  "Create the impact graph using clojure zippers"
+(defn compute-impact-tree
+  "Create the impact tree using clojure zippers"
   [origin]
   (let [article (if (:article origin)
                       (mc/find-map-by-id db "articles" (:article origin))
@@ -174,10 +149,10 @@
 
 
 (defn compute-dfs
-  "Compute the amount of elements in the impact graph"
-  [graph]
+  "Compute the amount of elements in the impact tree"
+  [tree]
   (loop [counter 0
-         loc graph]
+         loc tree]
     (if (zip/end? loc)
       counter
       (recur
@@ -187,16 +162,16 @@
        (zip/next loc)))))
 
 
-(defn simplify-graph
+(defn simplify-tree
   "Shows only specific elements in the nodes of an impact graph"
-  [graph]
-  (loop [pub-time (-> (zip/root graph) :source :ts)
+  [tree]
+  (loop [pub-time (-> (zip/root tree) :source :ts)
          hashtags []
          tokens []
-         loc graph]
+         loc tree]
     (if (zip/end? loc)
-      {:nodes(zip/root loc)
-       :tokens (frequencies (remove #(= % "") tokens))
+      {:root (zip/root loc)
+       :tokens (frequencies tokens)
        :hashtags (frequencies (map :text hashtags))}
       (recur
        pub-time
@@ -204,10 +179,7 @@
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
        (if (zip/node loc)
-         (let [text (clojure.string/lower-case (clojure.string/replace (-> loc zip/node :tweet :text) #"(\n|\d|\t|\,|\.)" " "))]
-           (->> (clojure.string/split text  #" ")
-                (remove #(contains? stopwords %))
-                (into tokens)))
+         (conj tokens (clojure.set/difference (into #{} (tokenize (-> loc zip/node :tweet :text))) (first tokens)))
          tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
@@ -249,23 +221,25 @@
        (zip/next loc)))))
 
 
-(defn example-graph []
-  (let [tree (compute-impact-graph (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
-    {:graph (simplify-graph tree)
+(defn example-tree []
+  (let [tree (compute-impact-tree (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
+    {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
 
 
-(defn random-graph []
-  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-graph)]
-    {:graph (simplify-graph tree)
+(defn random-tree []
+  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)]
+    {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
 
 
 ;; --- MONGO DATA EXPORT/IMPORT ---
 
-(defn backup [folder-path coll]
+(defn backup
+  "Write last day's collection to specific folder"
+  [folder-path coll]
   (let [yesterday (t/minus (t/today) (t/days 1))
         file-path (str folder-path
                        "/" coll
@@ -340,26 +314,22 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))))))
 
-  (def articles (mc/find-maps db "origins" {:source {$in news-accounts}}))
+  (def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
-  (def example-graph (compute-impact-graph (mc/find-map-by-id db "origins" (ObjectId. "53da170d657a10b9f098be86"))))
+  (-> (example-tree) pprint)
 
-  (-> (let [tree (-> articles rand-nth compute-impact-graph)]
-        [(simplify-graph tree)
-         (tree-height tree)])
-       clojure.pprint/pprint)
+  (def tree (random-tree))
 
-  (count articles)
+  (pprint tree)
 
-  (-> (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859"))
-      compute-impact-graph
-      simplify-graph
-      clojure.pprint/pprint)
 
-  (let [trees (pmap compute-impact-graph articles)]
-    (->> (pmap tree-height trees)
-         frequencies
-         clojure.pprint/pprint))
+  (into #{} (-> tree :graph :root :tweet :text tokenize))
 
+  ;; twitter-nlp
+  ;; html compression
+
+  (clojure.set/difference #{1 2 3} #{})
+
+  (conj [] #{2 3 4})
 
 )
