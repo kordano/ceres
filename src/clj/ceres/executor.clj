@@ -4,7 +4,7 @@
             [clojurewerkz.quartzite.jobs :as j]
             [clojurewerkz.quartzite.conversion :as qc]
             [clojurewerkz.quartzite.jobs :refer [defjob]]
-            [clojurewerkz.quartzite.schedule.daily-interval :refer [schedule with-repeat-count with-interval-in-days with-interval-in-minutes time-of-day every-day starting-daily-at ending-daily-at]]
+            [clojurewerkz.quartzite.schedule.daily-interval :refer [schedule time-of-day every-day starting-daily-at ending-daily-at]]
             [ceres.curator :as curator]
             [taoensso.timbre :as timbre]))
 
@@ -15,7 +15,6 @@
       (info "Writing articles backup...")
     (curator/backup-articles path)))
 
-
 (defjob TweetBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing tweets backup...")
@@ -23,8 +22,9 @@
 
 (defjob OriginBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
-      (info "Writing tweets backup...")
+      (info "Writing origins backup...")
     (curator/backup-origins path)))
+
 
 (defn tweets-backup-schedule
   "Create a schedule to backup the tweets at 3 am"
@@ -63,8 +63,9 @@
                     (ending-daily-at (time-of-day 3 05 01)))))]
     (qs/schedule job trigger)))
 
+
 (defn origins-backup-schedule
-  "Create a schedule to backup the articles at 3.10 am"
+  "Create a schedule to backup the origins at 3.10 am"
   [path]
   (let [job (j/build
              (j/of-type OriginBackup)
@@ -80,6 +81,7 @@
                     (starting-daily-at (time-of-day 3 10 00))
                     (ending-daily-at (time-of-day 3 10 01)))))]
     (qs/schedule job trigger)))
+
 
 (defn start-executor
   "Run the schedules"
