@@ -8,31 +8,31 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/clojurescript "0.0-2227"]
-                 [org.clojure/data.json "0.2.4"]
+                 [org.clojure/clojurescript "0.0-2311"]
+                 [org.clojure/data.json "0.2.5"]
                  [org.clojure/core.async "0.1.303.0-886421-alpha"]
-                 [clj-time "0.7.0"]
+                 [clj-time "0.8.0"]
                  [cheshire "5.3.1"]
 
                  [compojure "1.1.8"]
-                 [ring "1.2.2"]
+                 [ring "1.3.0"]
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
 
                  [gezwitscher "0.1.1-SNAPSHOT"]
-                 [com.novemberain/monger "2.0.0-rc1"]
+                 [com.novemberain/monger "2.0.0"]
                  [incanter "1.5.5"]
                  [kioo "0.4.0"]
                  [figwheel "0.1.3-SNAPSHOT"]
-                 [com.facebook/react "0.9.0.2"]
-                 [om "0.6.4"]
-                 [prismatic/dommy "0.1.2"]
+                 [com.facebook/react "0.11.1"]
+                 [om "0.7.1"]
+                 [prismatic/dommy "0.1.3"]
                  [net.drib/strokes "0.5.1"]
                  [clojure-opennlp "0.3.2"]
 
                  [clojurewerkz/quartzite "1.3.0"]
                  [com.cemerick/piggieback "0.1.3"]
-                 [weasel "0.2.0"]
+                 [weasel "0.3.0"]
                  [com.taoensso/timbre "3.2.1"]]
 
   :main ceres.core
@@ -51,6 +51,7 @@
   :figwheel {:http-server-root "public"
              :port 3449
              :css-dirs ["resources/public/css"]}
+
 
   :cljsbuild
   {:builds
