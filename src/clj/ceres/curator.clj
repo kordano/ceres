@@ -24,6 +24,8 @@
 (defrecord Reaction [tweet reactions])
 
 
+(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+
 (def stopwords
   (into #{}
         (clojure.string/split
@@ -314,7 +316,6 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))))))
 
-  (def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
   (-> (example-tree) pprint)
 

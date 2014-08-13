@@ -8,7 +8,7 @@
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store] :as collector]
-            [ceres.curator :refer [get-recent-articles get-articles-count get-news-diffusion get-news-frequencies] :as curator]
+            [ceres.curator :refer [get-articles-count get-news-diffusion get-news-frequencies] :as curator]
             [ceres.executor :refer [start-executor]]
             [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
@@ -126,11 +126,7 @@
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
   (when (:init? @server-state)
-    (collector/init-mongo)
-    (try (curator/backup-articles (:backup-folder @server-state))
-         (catch Exception e (error (str "Caught exception" (.getMessage e)))))
-    (try (curator/backup-origins (:backup-folder @server-state))
-         (catch Exception e (error (str "Caught exception" (.getMessage e))))))
+    (collector/init-mongo))
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
