@@ -30,6 +30,9 @@
                  [net.drib/strokes "0.5.1"]
                  [clojure-opennlp "0.3.2"]
 
+                 [byte-transforms "0.1.3"]
+                 [byte-streams "0.1.13"]
+
                  [clojurewerkz/quartzite "1.3.0"]
                  [com.cemerick/piggieback "0.1.3"]
                  [weasel "0.3.0"]

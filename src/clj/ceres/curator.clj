@@ -14,7 +14,8 @@
             [clj-time.coerce :as c]
             [clojure.java.shell :refer [sh]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
-            [clojure.pprint :refer [pprint]]
+            [byte-streams :as bs]
+            [byte-transforms :as bt]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
@@ -241,16 +242,18 @@
 
 (defn backup
   "Write last day's collection to specific folder"
-  [folder-path coll]
+  [coll folder-path]
   (let [yesterday (t/minus (t/today) (t/days 1))
+        m (str (t/month yesterday))
+        d (str (t/day yesterday))
         file-path (str folder-path
                        "/" coll
-                       "-"  (t/year yesterday)
-                       "-" (t/month yesterday)
+                       "-" (if (< (count m) 2) (str 0 m) m)
+                       "-" (if (< (count d) 2) (str 0 d) d)
                        "-" (t/day yesterday) ".json")]
     (sh "mongoexport"
         "--port" "27017"
-        "--host" "$DB_PORT_27017_TCP_ADDR"
+        "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
         "--db" coll
         "--collection" "tweets"
         "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
@@ -329,8 +332,9 @@
   ;; twitter-nlp
   ;; html compression
 
-  (clojure.set/difference #{1 2 3} #{})
+  (let [s "test"
+        cs  (bt/compress s :bzip2)]
+    (bs/to-string (bt/decompress cs :bzip2)))
 
-  (conj [] #{2 3 4})
-
+  (bt/available-compressors)
 )
