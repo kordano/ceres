@@ -27,6 +27,7 @@
   [:#d3-js] (set-attr "src" "static/d3/d3.min.js")
   [:#js-files] (substitute (html [:script {:src "js/main.js" :type "text/javascript"}])))
 
+
 (defn format-article
   "Formats a given article record removing html content and content-type"
   [article]
@@ -109,7 +110,6 @@
        (assoc-in [:app :recent-articles] []))))
 
 
-
 (defroutes all-routes
   (resources "/")
 
@@ -153,5 +153,7 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
+
+  (-> @server-state :app :recent-articles )
 
   )
