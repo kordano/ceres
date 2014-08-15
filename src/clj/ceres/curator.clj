@@ -248,9 +248,10 @@
         d (str (t/day yesterday))
         file-path (str folder-path
                        "/" coll
+                       "-" (t/year yesterday)
                        "-" (if (< (count m) 2) (str 0 m) m)
                        "-" (if (< (count d) 2) (str 0 d) d)
-                       "-" (t/day yesterday) ".json")]
+                       ".json")]
     (sh "mongoexport"
         "--port" "27017"
         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
@@ -337,4 +338,5 @@
     (bs/to-string (bt/decompress cs :bzip2)))
 
   (bt/available-compressors)
+
 )

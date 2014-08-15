@@ -13,17 +13,17 @@
 (defjob ArticlesBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing articles backup...")
-    (curator/backup-articles path)))
+    (curator/backup "articles" path)))
 
 (defjob TweetBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing tweets backup...")
-      (curator/backup-tweets path)))
+      (curator/backup "tweets" path)))
 
 (defjob OriginBackup [ctx]
   (let [path (get (qc/from-job-data ctx) "folder-path")]
       (info "Writing origins backup...")
-    (curator/backup-origins path)))
+    (curator/backup "origins" path)))
 
 
 (defn tweets-backup-schedule
