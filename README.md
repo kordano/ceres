@@ -1,6 +1,7 @@
 # Ceres
 
 A news tweet and article collector.
+See live application [here](https://ceres.polyc0l0r.net/)
 
 ## Usage
 
