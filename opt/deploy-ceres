@@ -1,0 +1,2 @@
+#!/bin/bash
+docker stop ceres; docker rm ceres;  docker run -d -v /home/konrad/data/ceres:/opt/data --link mongodb:db --name ceres -p 8082:8082 kordano/ceres
