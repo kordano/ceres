@@ -8,9 +8,9 @@ RUN apt-get install -y curl git wget unzip
 
 # prepare for Java download
 RUN apt-get install -y software-properties-common
-RUN apt-get -y install openjdk-6-jre-headless
+RUN apt-get -y install openjdk-7-jre-headless
 RUN apt-get install -y mongodb-clients
-ENV JAVA_HOME /usr/lib/jvm/java-6-openjdk-amd64
+ENV JAVA_HOME /usr/lib/jvm/java-7-openjdk-amd64
 
 # fix wget
 RUN export HTTP_CLIENT="wget --no-check-certificate -O"
