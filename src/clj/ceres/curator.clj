@@ -25,7 +25,7 @@
 (defrecord Reaction [tweet reactions])
 
 
-(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
 (def stopwords
   (into #{}
