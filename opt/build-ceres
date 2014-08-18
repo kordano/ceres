@@ -1,0 +1,2 @@
+#!/bin/bash
+cd /opt/ceres; lein cljsbuild clean;lein cljsbuild once prod

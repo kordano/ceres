@@ -1,0 +1,2 @@
+#!/bin/bash
+cd /opt/ceres; lein run /opt/server-config.edn
