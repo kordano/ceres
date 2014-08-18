@@ -182,7 +182,7 @@
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
        (if (zip/node loc)
-         (conj tokens (clojure.set/difference (into #{} (tokenize (-> loc zip/node :tweet :text))) (first tokens)))
+         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text)) (first tokens)))
          tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
