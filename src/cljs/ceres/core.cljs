@@ -249,7 +249,6 @@
    [:.article-timestamp] (content (.toString (:ts article)))})
 
 
-
 (deftemplate articles-list "templates/articles.html"
   [data owner]
   {[:#article-collection] (content (doall (map #(article-item % owner) (sort-by :ts > (mapv :article (:articles data))))))
@@ -330,32 +329,6 @@
       (chart-view app))))
 
 
-(deftemplate navbar "templates/navbar.html" [app]
-  {[:#ceres-brand] (content "Collector")
-   [:#diffusion-btn]
-   (listen
-    :on-click
-    (fn [e]
-      (om/root #(om/component (dom/p nil "DIFFUSION!!!")) app
-               {:target (. js/document (getElementById "central-container"))})))
-   [:#stats-btn]
-   (listen
-    :on-click
-    (fn [e]
-      (let [[ws-in _] (:ws-chs @app)
-            out (:stats-ch @app)]
-        (go
-          (>! ws-in {:topic :tweets-count :data ""})
-          (let [{:keys [topic data] :as package} (<! out)]
-            (when (= topic :tweets-count)
-              (om/transact! app :tweets-count (fn [old] data))))
-          (<! (timeout 500))
-          (om/root
-           stats-view
-           app
-           {:target (. js/document (getElementById "central-container"))})))))})
-
-
 (defn tweets-view
   "Shows recent tweets, connects to server and updates automatically"
   [app owner]
@@ -404,7 +377,8 @@
           (loop []
             (let [{:keys [topic data] :as package} (<! out)]
               (case topic
-                :init (do (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %)))  (:recent-articles data)))))
+                :init (do (om/transact! app :articles (fn [articles] (-> #{})))
+                          (om/transact! app :articles (fn [articles] (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) (:recent-articles data)))))
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
                           (dommy/set-text! (sel1 :#articles-loading-text) "")
                           (om/transact! app :articles-count (fn [counter] (:articles-count data))))
@@ -414,6 +388,42 @@
     om/IRenderState
     (render-state [this {:keys [counter] :as state}]
       (om/build articles-list app {:init-state state}))))
+
+
+(deftemplate navbar "templates/navbar.html" [app]
+  {[:#ceres-brand] (content "Collector")
+   [:#url-list-btn]
+   (listen
+    :on-click
+    (fn [e]
+      (om/root
+       articles-view
+       app-state
+       {:target (. js/document (getElementById "central-container"))})))
+
+   [:#diffusion-btn]
+   (listen
+    :on-click
+    (fn [e]
+      (om/root #(om/component (dom/p nil "DIFFUSION!!!")) app
+               {:target (. js/document (getElementById "central-container"))})))
+   [:#stats-btn]
+   (listen
+    :on-click
+    (fn [e]
+      (let [[ws-in _] (:ws-chs @app)
+            out (:stats-ch @app)]
+        (go
+          (>! ws-in {:topic :tweets-count :data ""})
+          (let [{:keys [topic data] :as package} (<! out)]
+            (when (= topic :tweets-count)
+              (om/transact! app :tweets-count (fn [old] data))))
+          (<! (timeout 500))
+          (om/root
+           stats-view
+           app
+           {:target (. js/document (getElementById "central-container"))})))))})
+
 
 ;; --- WS Connection and View Creation ---
 
@@ -451,6 +461,6 @@
   (om/root
    articles-view
    app-state
-   {:target (. js/document (getElementById "side-container"))})
+   {:target (. js/document (getElementById "central-container"))})
 
   )
