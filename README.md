@@ -4,9 +4,9 @@ A news tweet and article collector.
 
 ## Usage
 
-A running Mongodb instance is needed.
+A running Mongodb instance is required.
 
-Configurate server (see '/opt/example-server-config.edn' for reference) and start server with
+Configurate server (see '/opt/server-config.edn' for reference) and start server with
 
 ```
 lein run opt/server-config.edn
