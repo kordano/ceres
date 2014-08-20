@@ -8,11 +8,6 @@
  :http-server? true ;; decide wether the http-server is needed
  :backup? true ;; activate regular backup
  :backup-folder "/path/to/backup-folder"
- :script (do
-           (require '[ceres.curator :as c])
-           (require '[clj-time.core :as t])
-           (t/date-time 2014 7 10)
-           #_(c/backup-from-date (t/date-time 2014 8 10) "tweets" "/home/konny/data/"))
  :app ;; twitter related configs
  {:credentials ;; refer to twitter dev site
   {:consumer-key "????"
