@@ -25,7 +25,7 @@
 (defrecord Reaction [tweet reactions])
 
 
-#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
 (def stopwords
   (into #{}
@@ -182,7 +182,7 @@
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
        (if (zip/node loc)
-         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text)) (first tokens)))
+         (conj tokens (clojure.set/difference (into #{} (tokenize (-> loc zip/node :tweet :text))) (first tokens)))
          tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
@@ -239,75 +239,36 @@
 
 
 ;; --- MONGO DATA EXPORT/IMPORT ---
-
 (defn backup
-  "Write last day's collection to specific folder"
-  [coll folder-path]
-  (let [yesterday (t/minus (t/today) (t/days 1))
-        m (str (t/month yesterday))
-        d (str (t/day yesterday))
+  "Write backup from given date of a specific collection to a given folder"
+  [date coll folder-path]
+  (let [day-after (t/plus date (t/days 1))
+        m (str (t/month date))
+        d (str (t/day date))
         file-path (str folder-path
                        "/" coll
-                       "-" (t/year yesterday)
+                       "-" (t/year date)
                        "-" (if (< (count m) 2) (str 0 m) m)
                        "-" (if (< (count d) 2) (str 0 d) d)
                        ".json")]
     (sh "mongoexport"
         "--port" "27017"
         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
-        "--db" coll
-        "--collection" "tweets"
-        "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
+        "--db" "athena"
+        "--collection" coll
+        "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long date) "), $lt : new Date(" (c/to-long day-after) ")}}")
         "--out" file-path)))
 
-
-(defn backup-tweets [folder-path]
-  (let [yesterday (t/minus (t/today) (t/days 1))
-        file-path (str folder-path
-                       "/tweets-" (t/year yesterday)
-                       "-" (t/month yesterday)
-                       "-" (t/day yesterday) ".json")]
-    (info
-     (sh "mongoexport"
-         "--port" "27017"
-         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
-         "--db" "athena"
-         "--collection" "tweets"
-         "--query" (str "{created_at : {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-         "--out" file-path))))
+(defn backup-yesterday
+  "Write last day's collection to specific folder"
+  [coll folder-path]
+  (partial backup (t/minus (t/today) (t/days 1))))
 
 
-(defn backup-articles [folder-path]
-  (let [yesterday (t/minus (t/today) (t/days 1))
-        file-path (str folder-path
-                       "/articles-" (t/year yesterday)
-                       "-" (t/month yesterday)
-                       "-" (t/day yesterday) ".json")]
-    (info
-     (sh "mongoexport"
-         "--port" "27017"
-         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
-         "--db" "athena"
-         "--collection" "articles"
-         "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-         "--out" file-path))))
-
-
-(defn backup-origins [folder-path]
-  (let [yesterday (t/minus (t/today) (t/days 1))
-        file-path (str folder-path
-                       "/origins-" (t/year yesterday)
-                       "-" (t/month yesterday)
-                       "-" (t/day yesterday) ".json")]
-    (info
-     (sh "mongoexport"
-         "--port" "27017"
-         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
-         "--db" "athena"
-         "--collection" "origins"
-         "--query" (str "{ts: {$gte : new Date(" (c/to-long yesterday) "), $lt : new Date(" (c/to-long (t/today)) ")}}")
-         "--out" file-path))))
-
+(defn backup-missing [path]
+  (do
+    (mapv #(backup (t/date-time 2014 8 18) % path) ["articles" "tweets" "origins"])
+    (mapv #(backup (t/date-time 2014 8 19) % path) ["articles" "tweets" "origins"])))
 
 (comment
 
@@ -318,10 +279,10 @@
       db
       "tweets"
       (:_id x)
-      (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))))))
+      (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))) ))
 
 
-  (-> (example-tree) pprint)
+   (-> (example-tree) pprint))
 
   (def tree (random-tree))
 

@@ -126,7 +126,8 @@
   (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
   (info "Starting twitter collector...")
   (when (:init? @server-state)
-    (collector/init-mongo))
+    (collector/init-mongo)
+    (curator/backup-missing (:backup-folder @server-state)))
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
@@ -138,7 +139,7 @@
 
 (comment
 
-  (initialize server-state "resources/server-config.edn")
+  (initialize server-state "opt/server-config.edn")
 
   (def stop-stream
     (let [{:keys [follow track handler credentials]} (:app @server-state)]
@@ -153,7 +154,5 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
-
-  (-> @server-state :app :recent-articles )
 
   )
