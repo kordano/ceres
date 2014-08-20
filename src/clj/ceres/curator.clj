@@ -25,7 +25,7 @@
 (defrecord Reaction [tweet reactions])
 
 
-(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
 (def stopwords
   (into #{}
@@ -182,7 +182,7 @@
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
        (if (zip/node loc)
-         (conj tokens (clojure.set/difference (into #{} (tokenize (-> loc zip/node :tweet :text))) (first tokens)))
+         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text)) (first tokens)))
          tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
@@ -299,5 +299,6 @@
     (bs/to-string (bt/decompress cs :bzip2)))
 
   (bt/available-compressors)
+
 
 )
