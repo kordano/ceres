@@ -262,13 +262,12 @@
 (defn backup-yesterday
   "Write last day's collection to specific folder"
   [coll folder-path]
-  (partial backup (t/minus (t/today) (t/days 1))))
+  (backup (t/minus (t/today) (t/days 1)) coll folder-path))
 
 
 (defn backup-missing [path]
   (do
-    (mapv #(backup (t/date-time 2014 8 18) % path) ["articles" "tweets" "origins"])
-    (mapv #(backup (t/date-time 2014 8 19) % path) ["articles" "tweets" "origins"])))
+    (mapv #(backup (t/date-time 2014 8 20) % path) ["articles" "tweets" "origins"])))
 
 (comment
 
@@ -299,6 +298,5 @@
     (bs/to-string (bt/decompress cs :bzip2)))
 
   (bt/available-compressors)
-
 
 )
