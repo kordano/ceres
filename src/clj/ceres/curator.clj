@@ -14,8 +14,6 @@
             [clj-time.coerce :as c]
             [clojure.java.shell :refer [sh]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
-            [byte-streams :as bs]
-            [byte-transforms :as bt]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
@@ -292,11 +290,4 @@
 
   ;; twitter-nlp
   ;; html compression
-
-  (let [s "test"
-        cs  (bt/compress s :bzip2)]
-    (bs/to-string (bt/decompress cs :bzip2)))
-
-  (bt/available-compressors)
-
 )
