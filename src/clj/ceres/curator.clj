@@ -263,10 +263,6 @@
   (backup (t/minus (t/today) (t/days 1)) coll folder-path))
 
 
-(defn backup-missing [path]
-  (do
-    (mapv #(backup (t/date-time 2014 8 20) % path) ["articles" "tweets" "origins"])))
-
 (comment
 
   ;; TODO update on server
