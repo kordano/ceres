@@ -1,0 +1,7 @@
+#!/bin/bash
+# Import yesterday's collected data, data path as argument
+yesterday=$(date -d yesterday +'%Y-%m-%d')
+data=$1
+mongoimport --db athena --collection tweets $data/tweets-$yesterday.json
+mongoimport --db athena --collection articles $data/articles-$yesterday.json
+mongoimport --db athena --collection origins $data/origins-$yesterday.json
