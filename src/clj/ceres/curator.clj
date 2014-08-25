@@ -12,6 +12,7 @@
             [clj-time.core :as t]
             [clj-time.format :as f]
             [clj-time.coerce :as c]
+            [clojure.pprint :refer [pprint]]
             [clojure.java.shell :refer [sh]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
@@ -19,11 +20,12 @@
 
 (timbre/refer-timbre)
 
+(defrecord Source [name articles])
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
 
 
-#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
 (def stopwords
   (into #{}
@@ -168,19 +170,19 @@
   [tree]
   (loop [pub-time (-> (zip/root tree) :source :ts)
          hashtags []
-         tokens []
+       ;;  tokens []
          loc tree]
     (if (zip/end? loc)
       {:root (zip/root loc)
-       :tokens (frequencies tokens)
+       ;; :tokens nil (frequencies tokens)
        :hashtags (frequencies (map :text hashtags))}
       (recur
        pub-time
        (if-let [node (zip/node loc)]
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
-       (if (zip/node loc)
-         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text)) (first tokens)))
+       #_(if (zip/node loc)
+         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text tokenize)) (first tokens)))
          tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
@@ -221,9 +223,13 @@
          max-path)
        (zip/next loc)))))
 
+(defn compute-impact-forest [source]
+  (let [source-origins (mc/find-maps db "origins" {:source source})]
+    (vec (pmap compute-impact-tree source-origins))))
+
 
 (defn example-tree []
-  (let [tree (compute-impact-tree (mc/find-map-by-id db "origins" (ObjectId. "53de1541657a439ad20d6859")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
+  (let [tree (compute-impact-tree (mc/find-map-by-id db "origins" (ObjectId. "53e4a2f8e4b04c026f6f5a3d")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
     {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
@@ -234,6 +240,61 @@
     {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
+
+
+(defn analyze-tree [tree]
+  (loop [counter 0
+         max-path 0
+         users []
+         hashtags []
+         delays []
+         loc tree]
+    (if (zip/end? loc)
+      {:size counter
+       :height max-path
+       :users users
+       :hashtags (vec (into #{} (map :text hashtags)))
+       :delays delays}
+      (recur
+       (if (zip/node loc)
+         (inc counter)
+         counter)
+       (if (zip/node loc)
+         (-> loc zip/path count (max max-path))
+         max-path)
+       (if-let [node (zip/node loc)]
+         (let [user (-> node :tweet :user)]
+             (conj users (-> {:name (:screen_name user) :followers (:followers_count user)})))
+         users)
+       (if-let [node (zip/node loc)]
+         (->> node :tweet :entities :hashtags (into hashtags))
+         hashtags)
+       (if (zip/node loc)
+         (let [pub-time (-> (zip/root tree) :source :ts)
+               post-delay (if (t/after? (-> loc zip/node :tweet :created_at) pub-time)
+                            (t/interval pub-time (-> loc zip/node :tweet :created_at))
+                            (t/interval (-> loc zip/node :tweet :created_at) pub-time))]
+           (conj delays (t/in-hours post-delay)))
+         delays)
+       (zip/next loc)))))
+
+
+(defn compute-summary [source]
+  (let [impact-forest (compute-impact-forest source)
+        analytics (map analyze-tree impact-forest)
+        sizes (map :size analytics)
+        heights (map :height analytics)
+        users (frequencies (flatten (map :users analytics)))
+        hashtags (frequencies (flatten (map :hashtags analytics)))
+        overall-size (reduce + sizes)]
+    {:source source
+     :articles (count impact-forest)
+     :top-users (take 50 (sort-by second > users))
+     :hastags (take 50 (sort-by second > hashtags))
+     :total-impact overall-size
+     :avg-impact (float (/ overall-size (count sizes)))
+     :no-reactions (float (/ (count (filter #(< % 1) heights)) (count heights)))
+     :avg-height (float (/ (reduce + heights) (count heights)))}))
 
 
 ;; --- MONGO DATA EXPORT/IMPORT ---
@@ -267,23 +328,51 @@
 
   ;; TODO update on server
   (time
-   (doseq [x (monger.collection/find-maps db "tweets")]
+   (doseq [x (mc/find-maps db "tweets")]
      (mc/update-by-id
       db
       "tweets"
       (:_id x)
-      (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))) ))
+      (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))) )))
+
+  custom-formatter
+
+  (-> (example-tree) pprint)
 
 
-   (-> (example-tree) pprint))
+  ;; "53e4a2f8e4b04c026f6f5a3d"
 
-  (def tree (random-tree))
-
-  (pprint tree)
+  (pprint (map compute-summary news-accounts))
 
 
-  (into #{} (-> tree :graph :root :tweet :text tokenize))
+  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)
+        ds (loop [pub-time (-> (zip/root tree) :source :ts)
+                  dates []
+                 loc tree]
+            (if (zip/end? loc)
+              dates
+              (recur
+               pub-time
+               (if (zip/node loc)
+                 (let [post-delay (if (t/after? (-> loc zip/node :tweet :created_at) pub-time)
+                                    (t/interval pub-time (-> loc zip/node :tweet :created_at))
+                                    (t/interval (-> loc zip/node :tweet :created_at) pub-time))]
+                   (conj dates (t/in-hours post-delay)))
+                 dates)
+               (zip/next loc))))]
+    ds)
+
+  (mc/count db "origins" {:source "SPIEGELONLINE"})
+
+  (-> (mc/find-maps db "origins" {:source {$in news-accounts}})
+      rand-nth
+      compute-impact-tree
+      analyze-tree
+      pprint)
+
 
   ;; twitter-nlp
   ;; html compression
+
+
 )
