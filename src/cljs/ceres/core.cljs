@@ -251,7 +251,7 @@
 
 (deftemplate articles-list "templates/articles.html"
   [data owner]
-  {[:#article-collection] (content (doall (map #(article-item % owner) (sort-by :ts > (mapv :article (:articles data))))))
+  {[:#article-collection] (content (doall (map #(article-item % owner) (vec (take 100 (sort-by :ts > (mapv :article (:articles data))))))))
    [:#article-overall-count] (content (:articles-count data))})
 ;; --- articles list templates end ---
 
@@ -269,24 +269,6 @@
 (deftemplate chart-view "templates/stats.html" [app]
   {[:.chart-selector] (listen :on-click #(.log js/console (.-id (.-target %))))
    [:#tweets-overall-count] (content (:tweets-count app))
-   [:#diffusion]
-   (listen
-    :on-click
-    #(if (nil? (:news-diffusion @app))
-       (let [[ws-in ws-out] (:ws-chs @app)
-            out (:stats-ch @app)]
-         (go
-           (dommy/add-class! (sel1 :#stats-loading) "circle")
-           (dommy/set-text! (sel1 :#stats-loading-text) "Loading...")
-           (>! ws-in {:topic :news-diffusion :data ""})
-           (let [{:keys [topic data] :as package} (<! out)]
-             (when (= topic :news-diffusion)
-               (om/transact! app :news-diffusion (fn [old] data))
-               (dommy/remove-class! (sel1 :#stats-loading) "circle")
-               (dommy/set-text! (sel1 :#stats-loading-text) "")
-               (draw-chart data "diffusion-container")))))
-       (draw-chart (:news-diffusion @app) "diffusion-container")))
-
    [:#tweets-count]
    (listen
     :on-click
@@ -382,7 +364,7 @@
                           (dommy/remove-class! (sel1 :#articles-loading) "circle")
                           (dommy/set-text! (sel1 :#articles-loading-text) "")
                           (om/transact! app :articles-count (fn [counter] (:articles-count data))))
-                :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 100 (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) data))))))
+                :new-article (do (om/transact! app :articles (fn [articles] (into #{} (take 1000 (apply conj articles (map (fn [article] (update-in article [:article :ts] #(js/Date. %))) data))))))
                                  (om/transact! app :articles-count inc))))
             (recur)))))
     om/IRenderState
@@ -400,13 +382,6 @@
        articles-view
        app-state
        {:target (. js/document (getElementById "central-container"))})))
-
-   [:#diffusion-btn]
-   (listen
-    :on-click
-    (fn [e]
-      (om/root #(om/component (dom/p nil "DIFFUSION!!!")) app
-               {:target (. js/document (getElementById "central-container"))})))
    [:#stats-btn]
    (listen
     :on-click
