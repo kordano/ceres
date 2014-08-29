@@ -251,7 +251,7 @@
 
 (deftemplate articles-list "templates/articles.html"
   [data owner]
-  {[:#article-collection] (content (doall (map #(article-item % owner) (vec (take 100 (sort-by :ts > (mapv :article (:articles data))))))))
+  {[:#article-collection] (content (doall (map #(article-item % owner) (vec (take 1000 (sort-by :ts > (mapv :article (:articles data))))))))
    [:#article-overall-count] (content (:articles-count data))})
 ;; --- articles list templates end ---
 
