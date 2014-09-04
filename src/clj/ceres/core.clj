@@ -145,7 +145,7 @@
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
-  (tweet-processor @server-state)
+  (tweet-processor server-state)
   (when (:backup? @server-state)
     (start-executor (:backup-folder @server-state))))
 
