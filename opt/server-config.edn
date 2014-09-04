@@ -9,7 +9,8 @@
  :backup? true ;; activate regular backup
  :backup-folder "/path/to/backup-folder"
  :app ;; twitter related configs
- {:credentials ;; refer to twitter dev site
+ {:db "athena" ;; specify mongodb database
+  :credentials ;; refer to twitter dev site
   {:consumer-key "????"
    :consumer-secret "????"
    :access-token "????"

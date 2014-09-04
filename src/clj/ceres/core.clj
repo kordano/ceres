@@ -7,10 +7,10 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.collector :refer [store] :as collector]
+            [ceres.collector :refer [store set-db] :as collector]
             [ceres.curator :refer [get-articles-count get-news-diffusion get-news-frequencies] :as curator]
             [ceres.executor :refer [start-executor]]
-            [gezwitscher.core :refer [start-filter-stream]]
+            [gezwitscher.core :refer [gezwitscher]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
@@ -85,7 +85,7 @@
                     (send! channel (str (dispatch (read-string data)))))))))
 
 
-(defn stream-handler
+(defn processed-tweets
   "React to incoming tweets"
   [state tweet]
   (let [articles (->> (store tweet)
@@ -98,16 +98,31 @@
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
 
 
+(defn tweet-processor [state]
+  (let [{{:keys [credentials track follow]} :app} @state
+        [in out] (gezwitscher credentials)]
+    (go
+      (>! in {:topic :start-stream :follow follow :track track})
+      (let [status-ch (:status-ch (<! out))]
+        (go-loop [status (<! status-ch)]
+          (when status
+            (processed-tweets state status)
+            (recur (<! status-ch))))))
+    (swap! state #(assoc-in %1 [:app :g-chans] %2) [in out])
+    [in out]))
+
+
 (defn initialize
   "Initialize the server state using a given config file"
   [state path]
-  (reset!
-   state
-   (-> path slurp read-string
-       (assoc-in [:app :handler] (partial stream-handler state))
-       (assoc-in [:app :out-chans] [])
-       (assoc-in [:app :recent-tweets] [])
-       (assoc-in [:app :recent-articles] []))))
+  (do
+    (reset!
+     state
+     (-> path slurp read-string
+         (assoc-in [:app :out-chans] [])
+         (assoc-in [:app :recent-tweets] [])
+         (assoc-in [:app :recent-articles] [])))
+    (set-db (-> @state :app :db))))
 
 
 (defroutes all-routes
@@ -130,28 +145,27 @@
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
-  (let [{:keys [follow track handler credentials]} (:app @server-state)]
-    (start-filter-stream follow track handler credentials))
+  (tweet-processor @server-state)
   (when (:backup? @server-state)
     (start-executor (:backup-folder @server-state))))
 
 
 (comment
 
-  (initialize server-state "opt/server-config.edn")
+  (initialize server-state "opt/server-config-1.edn")
 
-  (def stop-stream
-    (let [{:keys [follow track handler credentials]} (:app @server-state)]
-      (start-filter-stream follow track handler credentials)))
+  (tweet-processor server-state)
 
-  (stop-stream)
+  (let [[in out] (-> @server-state :app :g-chans)]
+    (go
+      (>! in {:topic :stop-stream})
+      (println (<! out))))
+
 
   (def stop-server
     (do
       (timbre/set-config! [:appenders :spit :enabled?] true)
       (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
-
-  (stop-server)
 
   )

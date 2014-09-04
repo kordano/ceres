@@ -14,9 +14,14 @@
 
 (timbre/refer-timbre)
 
-(def db (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
-              ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
-          (mg/get-db (mg/connect sa opts) "athena")))
+
+(def db (atom nil))
+
+(defn set-db [name]
+  (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
+        ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
+    (reset! db (mg/get-db (mg/connect sa opts) name))))
+
 
 (def custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY"))
 
@@ -27,15 +32,15 @@
   "Define mongodb indices on first start"
   []
   (do
-    (mc/ensure-index db "articles" (array-map :ts 1))
-    (mc/ensure-index db "origins" (array-map :ts 1))
-    (mc/ensure-index db "origins" (array-map :source 1))
-    (mc/ensure-index db "tweets" (array-map :user.screen_name 1))
-    (mc/ensure-index db "tweets" (array-map :id_str 1))
-    (mc/ensure-index db "tweets" (array-map :retweeted_status.id_str 1))
-    (mc/ensure-index db "tweets" (array-map :in_reply_to_status_id_str 1))
-    (mc/ensure-index db "tweets" (array-map :created_at 1))
-    (mc/ensure-index db "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
+    (mc/ensure-index @db "articles" (array-map :ts 1))
+    (mc/ensure-index @db "origins" (array-map :ts 1))
+    (mc/ensure-index @db "origins" (array-map :source 1))
+    (mc/ensure-index @db "tweets" (array-map :user.screen_name 1))
+    (mc/ensure-index @db "tweets" (array-map :id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :retweeted_status.id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :in_reply_to_status_id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :created_at 1))
+    (mc/ensure-index @db "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
 
 
 (defn- expand-url
@@ -60,7 +65,7 @@
   "Store relationship between article and tweet"
   [{:keys [article record ts source]}]
   (mc/insert-and-return
-   db
+   @db
    "origins"
    {:tweet record
     :article article
@@ -74,7 +79,7 @@
   (let [raw-html (slurp url)
         html-title (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)]
     (mc/insert-and-return
-     db
+     @db
      "articles"
      {:url url
       :title html-title
@@ -88,7 +93,7 @@
   [tweet]
   (let [oid (ObjectId.)
         doc (update-in tweet [:created_at] (fn [x] (f/parse custom-formatter x)))
-        record (from-db-object (mc/insert-and-return db "tweets" (merge doc {:_id oid})) true)
+        record (from-db-object (mc/insert-and-return @db "tweets" (merge doc {:_id oid})) true)
         ts (:created_at record)
         source (news-accounts (-> record :user :screen_name))
         record-urls (-> record :entities :urls)
@@ -100,7 +105,7 @@
                                   (assoc expanded-url :url (:expanded_url %)))) record-urls))
         articles (if (nil? expanded-urls)
                    nil
-                   (map #(assoc % :article (-> (mc/find-one-as-map db "articles" {:url (:url %)}) :_id)) expanded-urls))]
+                   (map #(assoc % :article (-> (mc/find-one-as-map @db "articles" {:url (:url %)}) :_id)) expanded-urls))]
     (if (nil? articles)
       nil
       (doall

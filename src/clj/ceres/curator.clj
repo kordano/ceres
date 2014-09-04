@@ -25,14 +25,7 @@
 (defrecord Reaction [tweet reactions])
 
 
-(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
-
-(def stopwords
-  (into #{}
-        (clojure.string/split
-             "aber,als,am,an,auch,auf,aus,bei,bin,bis,ist,da,dadurch,daher,darum,das,daß,dass,dein,deine,dem,den,der,des,dessen,deshalb,die,dies,dieser,dieses,doch,dort,du,durch,ein,eine,einem,einen,einer,eines,er,es,euer,eure,für,habe,hast,hat,haben,habt,hatte,hatten,hattest,hattet,hier,hinter,ich,ihr,ihre,im,in,ist,ja,jede,jedem,jeden,jeder,jedes,jener,jenes,jetzt,kann,kannst,können,könnt,machen,mein,meine,mit,muß,mußt,musst,müssen,müßt,nach,nachdem,nein,ncht,nun,oder,seid,sein,seine,sich,sie,sind,soll,sollen,sollst,sollt,sonst,soweit,sowie,und,unser,unsere,unter,vom,von,vor,wann,warum,was,weiter,weitere,wenn,wer,werde,werden,werdet,weshalb,wie,wieder,wieso,wir,wird,wirst,wo,woher,wohin,zu,zum,zur,über,rt"
-             #",")))
-
+#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
 
 ;; --- DATA MINING ---
 
@@ -43,7 +36,7 @@
    (pmap
     #(-> [%
           (mc/count
-           db "tweets"
+           @db "tweets"
            {:user.screen_name %
             :created_at {$gt (t/date-time 2014 7 1)}})])
     news-accounts)))
@@ -52,13 +45,13 @@
 (defn get-tweet-count
   "Compute overall tweet count"
   []
-  (mc/count db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
+  (mc/count @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}}))
 
 
 (defn get-tweets-from-date
   "Fetch tweets from specific date"
   [year month day]
-  (mc/find-maps db "tweets"
+  (mc/find-maps @db "tweets"
                 {:created_at {$gt (t/date-time year month day 0 0 0 0)
                               $lte (t/date-time year month day 23 59 59 999)}}))
 
@@ -66,7 +59,7 @@
 (defn get-articles-from-date
   "Fetch articles from specific date"
   [year month day morning?]
-  (mc/find-maps db "articles"
+  (mc/find-maps @db "articles"
                 {:ts {$gt (t/date-time year month day (if morning? 0 12) 0 0 0)
                       $lte (t/date-time year month day (if morning? 11 23) 59 59 999)}}))
 
@@ -74,16 +67,16 @@
 (defn compute-diffusion
   "Compute the distribution of news account mentions"
   [user]
-  (->> (mc/count db "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
+  (->> (mc/count @db "tweets" {$and [{$or [{"entities.user_mentions.screen_name" user}
                                           {"retweeted_status.user.screen_name" user}
                                           {"in_reply_to_screen_name" user}]}
                                                     {:created_at {$gt (t/date-time 2014 7 1)}}]})))
 
 
 (defn compute-tweet-diffusion [tweet-id parents]
-  (let [tweet (mc/find-one-as-map db "tweets" {:id_str tweet-id})
+  (let [tweet (mc/find-one-as-map @db "tweets" {:id_str tweet-id})
         neighbor-tweets (->> (mc/find-maps
-                              db
+                              @db
                               "tweets"
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
@@ -101,13 +94,13 @@
 (defn get-articles-count
   "Compute articles count"
   []
-  (mc/count db "articles"))
+  (mc/count @db "articles"))
 
 
 (defn find-source
   "Find the source of a given article"
   [id]
-  (mc/find-maps db "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
+  (mc/find-maps @db "urls" {$and [{:article id} {:source {$ne nil}}]} [:source :tweet :ts]))
 
 
 (defn spread
@@ -115,7 +108,7 @@
   [tweet]
   (let [tweet-id (:id_str tweet)
         neighbor-tweets (->> (mc/find-maps
-                              db
+                              @db
                               "tweets"
                               {$and [{$or [{"retweeted_status.id_str" tweet-id}
                                            {"in_reply_to_status_id_str" tweet-id}]}
@@ -127,18 +120,18 @@
   "Create the impact tree using clojure zippers"
   [origin]
   (let [article (if (:article origin)
-                      (mc/find-map-by-id db "articles" (:article origin))
+                      (mc/find-map-by-id @db "articles" (:article origin))
                       nil)
-        tweet (mc/find-map-by-id db "tweets" (:tweet origin))]
+        tweet (mc/find-map-by-id @db "tweets" (:tweet origin))]
     (let [related-origins (if article
-                             (->> (mc/find-maps db "origins" {:article  (:_id article)} [:tweet])
+                             (->> (mc/find-maps @db "origins" {:article  (:_id article)} [:tweet])
                                   (remove #(= (:_id %) (:_id origin)))
                                   (pmap :tweet)
-                                  (pmap #(mc/find-map-by-id db "tweets" %))
+                                  (pmap #(mc/find-map-by-id @db "tweets" %))
                                   (filter #(or (nil? (-> % :retweeted_status :id_str)) (= (-> % :retweeted_status :id_str) (:id_str tweet)))))
                              nil)
           related-tweets (->> (mc/find-maps
-                                db
+                                @db
                                 "tweets"
                                 {$and [{$or [{"retweeted_status.id_str" (:id_str tweet)}
                                              {"in_reply_to_status_id_str" (:id_str tweet)}]}
@@ -229,14 +222,14 @@
 
 
 (defn example-tree []
-  (let [tree (compute-impact-tree (mc/find-map-by-id db "origins" (ObjectId. "53e4a2f8e4b04c026f6f5a3d")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
+  (let [tree (compute-impact-tree (mc/find-map-by-id @db "origins" (ObjectId. "53e4a2f8e4b04c026f6f5a3d")))] ; alternativ "53de3d68657a74caed255892" "53d7a7ad657ad4126658d0ba" "53de089f657a439ad20d6133"
     {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
 
 
 (defn random-tree []
-  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)]
+  (let [tree (-> (mc/find-maps @db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)]
     {:graph (simplify-tree tree)
      :height (tree-height tree)
      :size (compute-dfs tree)}))
@@ -300,7 +293,7 @@
 ;; --- MONGO DATA EXPORT/IMPORT ---
 (defn backup
   "Write backup from given date of a specific collection to a given folder"
-  [date coll folder-path]
+  [date database coll folder-path]
   (let [day-after (t/plus date (t/days 1))
         m (str (t/month date))
         d (str (t/day date))
@@ -313,15 +306,15 @@
     (sh "mongoexport"
         "--port" "27017"
         "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
-        "--db" "athena"
+        "--db" database
         "--collection" coll
         "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long date) "), $lt : new Date(" (c/to-long day-after) ")}}")
         "--out" file-path)))
 
 (defn backup-yesterday
   "Write last day's collection to specific folder"
-  [coll folder-path]
-  (backup (t/minus (t/today) (t/days 1)) coll folder-path))
+  [database coll folder-path]
+  (backup (t/minus (t/today) (t/days 1)) database coll folder-path))
 
 
 (comment
@@ -370,6 +363,9 @@
       analyze-tree
       pprint)
 
+  (-> (mc/find-maps @db "tweets" {:created_at {$gt (t/today)}})
+      count
+      time)
 
   ;; twitter-nlp
   ;; html compression
