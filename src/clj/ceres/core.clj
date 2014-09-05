@@ -106,6 +106,7 @@
     (reset!
      state
      (-> path slurp read-string
+         (assoc-in [:app :handler] (partial stream-handler state))
          (assoc-in [:app :out-chans] [])
          (assoc-in [:app :recent-tweets] [])
          (assoc-in [:app :recent-articles] [])))
@@ -145,6 +146,7 @@
   (def stop-stream
     (let [{:keys [follow track handler credentials]} (:app @server-state)]
       (start-filter-stream follow track handler credentials)))
+
   (stop-stream)
 
   (def stop-server
