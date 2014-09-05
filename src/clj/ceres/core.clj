@@ -10,7 +10,7 @@
             [ceres.collector :refer [store set-db] :as collector]
             [ceres.curator :refer [get-articles-count get-news-diffusion get-news-frequencies] :as curator]
             [ceres.executor :refer [start-executor]]
-            [gezwitscher.core :refer [gezwitscher]]
+            [gezwitscher.core :refer [start-filter-stream]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
@@ -85,7 +85,7 @@
                     (send! channel (str (dispatch (read-string data)))))))))
 
 
-(defn processed-tweets
+(defn stream-handler
   "React to incoming tweets"
   [state tweet]
   (let [articles (->> (store tweet)
@@ -97,19 +97,6 @@
       (doall (map #(put! % {:topic :new-article :data articles}) (-> @state :app :out-chans))))
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
 
-
-(defn tweet-processor [state]
-  (let [{{:keys [credentials track follow]} :app} @state
-        [in out] (gezwitscher credentials)]
-    (go
-      (>! in {:topic :start-stream :follow follow :track track})
-      (let [status-ch (:status-ch (<! out))]
-        (go-loop [status (<! status-ch)]
-          (when status
-            (processed-tweets state status)
-            (recur (<! status-ch))))))
-    (swap! state #(assoc-in %1 [:app :g-chans] %2) [in out])
-    [in out]))
 
 
 (defn initialize
@@ -145,7 +132,8 @@
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
-  (tweet-processor server-state)
+  (let [{:keys [follow track handler credentials]} (:app @server-state)]
+    (start-filter-stream follow track handler credentials))
   (when (:backup? @server-state)
     (start-executor (:backup-folder @server-state))))
 
@@ -154,13 +142,10 @@
 
   (initialize server-state "opt/server-config-1.edn")
 
-  (tweet-processor server-state)
-
-  (let [[in out] (-> @server-state :app :g-chans)]
-    (go
-      (>! in {:topic :stop-stream})
-      (println (<! out))))
-
+  (def stop-stream
+    (let [{:keys [follow track handler credentials]} (:app @server-state)]
+      (start-filter-stream follow track handler credentials)))
+  (stop-stream)
 
   (def stop-server
     (do
