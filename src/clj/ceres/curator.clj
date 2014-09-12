@@ -6,26 +6,25 @@
             [clojure.data.json :as json]
             [monger.joda-time]
             [clojure.string :refer [split join]]
-            [taoensso.timbre :as timbre]
             [clojure.walk :as walk]
             [clojure.zip :as zip]
             [clj-time.core :as t]
             [clj-time.format :as f]
-            [clj-time.coerce :as c]
-            [clojure.pprint :refer [pprint]]
-            [clojure.java.shell :refer [sh]]
+            [clj-time.coerce :as c] [clj-time.periodic :as p] [clojure.pprint :refer [pprint]] [clojure.java.shell :refer [sh]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
+            [incanter.core :refer :all]
+            [incanter.stats :refer :all]
+            [incanter.charts :refer :all]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
-(timbre/refer-timbre)
 
 (defrecord Source [name articles])
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
 
 
-#_(def tokenize (make-tokenizer "/home/konny/data/open-nlp/de-token.bin"))
+#_(def tokenize (make-tokenizer "data/de-token.bin"))
 
 ;; --- DATA MINING ---
 
@@ -163,20 +162,18 @@
   [tree]
   (loop [pub-time (-> (zip/root tree) :source :ts)
          hashtags []
-       ;;  tokens []
+         tokens []
          loc tree]
     (if (zip/end? loc)
       {:root (zip/root loc)
-       ;; :tokens nil (frequencies tokens)
+       :tokens (frequencies tokens)
        :hashtags (frequencies (map :text hashtags))}
       (recur
        pub-time
        (if-let [node (zip/node loc)]
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
-       #_(if (zip/node loc)
-         (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text tokenize)) (first tokens)))
-         tokens)
+       (if (zip/node loc) (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text tokenize)) (first tokens))) tokens)
        (if (nil? (zip/node loc))
          (zip/next loc)
          (zip/next
@@ -217,7 +214,7 @@
        (zip/next loc)))))
 
 (defn compute-impact-forest [source]
-  (let [source-origins (mc/find-maps db "origins" {:source source})]
+  (let [source-origins (mc/find-maps @db "origins" {:source source})]
     (vec (pmap compute-impact-tree source-origins))))
 
 
@@ -228,17 +225,12 @@
      :size (compute-dfs tree)}))
 
 
-(defn random-tree []
-  (let [tree (-> (mc/find-maps @db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)]
-    {:graph (simplify-tree tree)
-     :height (tree-height tree)
-     :size (compute-dfs tree)}))
-
-
 (defn analyze-tree [tree]
   (loop [counter 0
          max-path 0
          users []
+         ;; tokens []
+         pub-times []
          hashtags []
          delays []
          loc tree]
@@ -246,7 +238,9 @@
       {:size counter
        :height max-path
        :users users
-       :hashtags (vec (into #{} (map :text hashtags)))
+       ;;:tokens tokens
+       :pub-times pub-times
+       :hashtags (mapv #(-> % :text clojure.string/lower-case) hashtags)
        :delays delays}
       (recur
        (if (zip/node loc)
@@ -257,8 +251,12 @@
          max-path)
        (if-let [node (zip/node loc)]
          (let [user (-> node :tweet :user)]
-             (conj users (-> {:name (:screen_name user) :followers (:followers_count user)})))
+             (conj users (:screen_name user)))
          users)
+       #_(if (zip/node loc) (conj tokens (clojure.set/difference (into #{} (-> loc zip/node :tweet :text tokenize)) (first tokens))) tokens)
+       (if-let [node (zip/node loc)]
+         (->> node :tweet :created_at (conj pub-times))
+         pub-times)
        (if-let [node (zip/node loc)]
          (->> node :tweet :entities :hashtags (into hashtags))
          hashtags)
@@ -267,23 +265,40 @@
                post-delay (if (t/after? (-> loc zip/node :tweet :created_at) pub-time)
                             (t/interval pub-time (-> loc zip/node :tweet :created_at))
                             (t/interval (-> loc zip/node :tweet :created_at) pub-time))]
-           (conj delays (t/in-hours post-delay)))
+           (conj delays (t/in-seconds post-delay)))
          delays)
        (zip/next loc)))))
+
+
+(defn random-tree []
+  (let [origin (rand-nth (mc/find-maps @db "origins" {:source {$in news-accounts}}))
+        tree (-> origin compute-impact-tree)]
+    [(:title (mc/find-map-by-id @db "articles" (:article origin)))
+     (analyze-tree tree)]))
 
 
 (defn compute-summary [source]
   (let [impact-forest (compute-impact-forest source)
         analytics (map analyze-tree impact-forest)
         sizes (map :size analytics)
+        pub-times (map :pub-times analytics)
         heights (map :height analytics)
-        users (frequencies (flatten (map :users analytics)))
-        hashtags (frequencies (flatten (map :hashtags analytics)))
+        delays (apply concat (map :delays analytics))
+        users (->> analytics
+                   (map :users)
+                   (apply concat))
+        hashtags (->> analytics
+                      (map :hashtags)
+                      flatten)
         overall-size (reduce + sizes)]
     {:source source
-     :articles (count impact-forest)
-     :top-users (take 50 (sort-by second > users))
-     :hastags (take 50 (sort-by second > hashtags))
+     :article-count (count impact-forest)
+     :users users
+     :hashtags hashtags
+     :pub-times pub-times
+     :heights heights
+     :sizes sizes
+     :delays delays
      :total-impact overall-size
      :avg-impact (float (/ overall-size (count sizes)))
      :no-reactions (float (/ (count (filter #(< % 1) heights)) (count heights)))
@@ -338,37 +353,61 @@
   (pprint (map compute-summary news-accounts))
 
 
-  (let [tree (-> (mc/find-maps db "origins" {:source {$in news-accounts}}) rand-nth compute-impact-tree)
-        ds (loop [pub-time (-> (zip/root tree) :source :ts)
-                  dates []
-                 loc tree]
-            (if (zip/end? loc)
-              dates
-              (recur
-               pub-time
-               (if (zip/node loc)
-                 (let [post-delay (if (t/after? (-> loc zip/node :tweet :created_at) pub-time)
-                                    (t/interval pub-time (-> loc zip/node :tweet :created_at))
-                                    (t/interval (-> loc zip/node :tweet :created_at) pub-time))]
-                   (conj dates (t/in-hours post-delay)))
-                 dates)
-               (zip/next loc))))]
-    ds)
+  (def rand-tree (random-tree))
 
-  (mc/count db "origins" {:source "SPIEGELONLINE"})
 
-  (-> (mc/find-maps db "origins" {:source {$in news-accounts}})
-      rand-nth
-      compute-impact-tree
-      analyze-tree
-      pprint)
+  (println "\n")
+
+
+
+  (def n-freq (get-news-frequencies))
+
 
   (-> (mc/find-maps @db "tweets" {:created_at {$gt (t/today)}})
       count
       time)
 
+  (def sum-tagesschau (compute-summary "tagesschau"))
+
+  (def sum-faz (compute-summary "FAZ_NET"))
+
+  (def sum-sz (compute-summary "SZ"))
+
+  (def sum-spon (compute-summary "SPIEGELONLINE"))
+
+  (def sum-welt (compute-summary "welt"))
+
+
+
+  (let [faz-hours (->> sum-faz
+                       :pub-times
+                       flatten
+                       (map t/hour)
+                       frequencies
+                       (sort-by key <))]
+    (view (line-chart (keys pub-hours) (vals pub-hours))))
+
+
+  (let [delays (->>  sum-faz
+                     :delays
+                     (remove #(= % 0))
+                     (remove #(> % 600)))]
+    (view (histogram delays :nbins 120)))
+
+
+  (let [hours-running (t/in-hours (t/interval (t/date-time 2014 7 2) (t/now)))
+        dates (take hours-running (p/periodic-seq (t/date-time 2014 7 2) (t/hours 1)))
+        tweet-count (map
+                     #(mc/count @db
+                                "tweets"
+                                {:created_at {$gte %
+                                              $lt (t/plus % (t/hours 1))}})
+                     dates)
+        days-since-start (range hours-running)]
+    (view (line-chart days-since-start tweet-count)))
+
+
+
   ;; twitter-nlp
   ;; html compression
-
-
-)
+  )
