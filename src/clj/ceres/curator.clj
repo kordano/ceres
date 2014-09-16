@@ -143,6 +143,12 @@
        (Article. origin tweet (vec (pmap spread (into #{} merged-articles))))))))
 
 
+(defn compute-user-tree [name]
+  (let [user-tweets (mc/find-maps @db "tweets" (:user.screen_name name))
+        reactions (pmap spread user-tweets)]
+    reactions))
+
+
 (defn compute-dfs
   "Compute the amount of elements in the impact tree"
   [tree]
@@ -379,35 +385,71 @@
 
 
 
-  (let [faz-hours (->> sum-faz
+  ;; publication time of day
+  (let [sz-hours (->> sum-sz
                        :pub-times
                        flatten
                        (map t/hour)
                        frequencies
                        (sort-by key <))]
-    (view (line-chart (keys pub-hours) (vals pub-hours))))
+    (view (line-chart (keys sz-hours) (vals sz-hours))))
 
 
-  (let [delays (->>  sum-faz
+  ;; reaction delay
+  (let [delays (->>  sum-sz
                      :delays
                      (remove #(= % 0))
                      (remove #(> % 600)))]
     (view (histogram delays :nbins 120)))
 
 
-  (let [hours-running (t/in-hours (t/interval (t/date-time 2014 7 2) (t/now)))
-        dates (take hours-running (p/periodic-seq (t/date-time 2014 7 2) (t/hours 1)))
-        tweet-count (map
-                     #(mc/count @db
-                                "tweets"
-                                {:created_at {$gte %
-                                              $lt (t/plus % (t/hours 1))}})
-                     dates)
-        days-since-start (range hours-running)]
-    (view (line-chart days-since-start tweet-count)))
+  ;; daily tweet counts
+  (let [days (t/in-days (t/interval (t/date-time 2014 8 1) (t/date-time 2014 9 15)))
+        dates (take days (p/periodic-seq (t/date-time 2014 8 1) (t/days 1)))
+        tweet-counts (map
+                      (fn [date]
+                        (->> sum-sz
+                             :pub-times
+                             flatten
+                             (filter #(and (t/after? % date) (t/before? % (t/plus date (t/days 1)))))
+                             count))
+                      dates)
+        ]
+    (view (line-chart (range 1 (inc days)) tweet-counts)))
 
+
+
+
+  ;; tweet counts
+  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 15)))
+        dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/days 1)))
+        sz-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "SZ" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
+        spon-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "SPIEGELONLINE" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
+        faz-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "FAZ_NET" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
+        bild-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "BILD" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
+        tagesschau-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "tagesschau" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
+        days-since-start (apply concat (repeat 5 (range days-running)))
+        ;; tweet-count-2 (loop [hours-list [] tweet-dist tweet-count] (if (empty? tweet-dist) hours-list (recur (conj hours-list (vec (take 24 tweet-dist))) (drop 24 tweet-dist))))
+        ;; avg-tweets-per-hour (map (fn [hour] (/ (reduce + (map (fn [count] (get count hour)) tweet-count-2)) (count tweet-count-2))) (range 24))
+        tweet-counts (concat sz-tweet-count spon-tweet-count faz-tweet-count bild-tweet-count tagesschau-tweet-count)
+        grouping (apply concat (map #(repeat (count sz-tweet-count) %) ["sz" "spon" "faz" "bild" "tagesschau"]))]
+    (view (line-chart days-since-start tweet-counts :legend true :group-by grouping)))
+
+  (let [days-running (t/in-hours (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 12)))
+        dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/hours 1)))
+        tweet-count (map #(mc/count @db "tweets" {:created_at {$gte % $lt (t/plus % (t/hours 1))}}) dates)
+        time (range days-running)
+        tweet-count-2 (loop [hours-list []
+                             tweet-dist tweet-count]
+                        (if (empty? tweet-dist)
+                          hours-list
+                          (recur (conj hours-list (vec (take 24 tweet-dist))) (drop 24 tweet-dist))))
+        avg-tweets-per-hour (map (fn [hour] (/ (reduce + (map (fn [count] (get count hour)) tweet-count-2)) (count tweet-count-2))) (range 24))]
+    (view (line-chart time tweet-count))
+    (view (line-chart (range 24) avg-tweets-per-hour)))
 
 
   ;; twitter-nlp
   ;; html compression
+
   )
