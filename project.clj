@@ -28,8 +28,9 @@
                  [om "0.6.4"]
                  [prismatic/dommy "0.1.2"]
                  [net.drib/strokes "0.5.1"]
-
                  [clojure-opennlp "0.3.2"]
+
+                 [clojurewerkz/quartzite "1.3.0"]
                  [aprint "0.1.0"]
                  [com.cemerick/piggieback "0.1.3"]
                  [weasel "0.2.0"]
