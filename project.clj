@@ -29,6 +29,7 @@
                  [prismatic/dommy "0.1.2"]
                  [net.drib/strokes "0.5.1"]
                  [clojure-opennlp "0.3.2"]
+                 [aysylu/loom "0.4.2"]
 
                  [clojurewerkz/quartzite "1.3.0"]
                  [aprint "0.1.0"]
