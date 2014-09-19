@@ -386,7 +386,8 @@
    (listen
     :on-click
     (fn [e]
-      (let [[ws-in _] (:ws-chs @app)
+      (.log js/console "HE'S DEAD, JIM!")
+      #_(let [[ws-in _] (:ws-chs @app)
             out (:stats-ch @app)]
         (go
           (>! ws-in {:topic :tweets-count :data ""})
