@@ -8,9 +8,9 @@
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
             [ceres.collector :refer [store set-db] :as collector]
-            [ceres.curator :refer [get-articles-count get-news-diffusion get-news-frequencies] :as curator]
+            [ceres.curator :refer [get-articles-count] :as curator]
             [ceres.executor :refer [start-executor]]
-            [gezwitscher.core :refer [start-filter-stream]]
+            [gezwitscher.core :refer [start-filter-stream gezwitscher]]
             [clojure.java.io :as io]
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :as timbre]))
@@ -57,8 +57,6 @@
   "Dispatch incoming websocket-requests"
   [{:keys [topic data] :as package}]
   (case topic
-    :news-frequencies (assoc package :data (get-news-frequencies))
-    :news-diffusion (assoc package :data (get-news-diffusion))
     :tweets-count (assoc package :data (curator/get-tweet-count))
     :init (assoc package :data
                  {:recent-articles (-> @server-state :app :recent-articles)
@@ -98,7 +96,6 @@
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
 
 
-
 (defn initialize
   "Initialize the server state using a given config file"
   [state path]
@@ -106,11 +103,22 @@
     (reset!
      state
      (-> path slurp read-string
-         (assoc-in [:app :handler] (partial stream-handler state))
          (assoc-in [:app :out-chans] [])
          (assoc-in [:app :recent-tweets] [])
          (assoc-in [:app :recent-articles] [])))
     (set-db (-> @state :app :db))))
+
+
+(defn start-stream [state]
+  (let [{:keys [follow track credentials]} (:app @state)
+        [in out] (gezwitscher credentials)]
+    (>!! in {:topic :start-stream :track track :follow follow})
+    (let [output (<!! out)]
+      (go-loop [status (<! (:status-ch output))]
+        (when status
+          (stream-handler state status)
+          (recur (<! (:status-ch output))))))
+    [in out]))
 
 
 (defroutes all-routes
@@ -133,8 +141,7 @@
   (info @server-state)
   (when (:http-server? @server-state)
     (run-server (site #'all-routes) {:port (:port @server-state) :join? false}))
-  (let [{:keys [follow track handler credentials]} (:app @server-state)]
-    (start-filter-stream follow track handler credentials))
+  (start-stream server-state)
   (when (:backup? @server-state)
     (start-executor (:backup-folder @server-state))))
 
@@ -143,16 +150,16 @@
 
   (initialize server-state "opt/server-config-1.edn")
 
-  (def stop-stream
-    (let [{:keys [follow track handler credentials]} (:app @server-state)]
-      (start-filter-stream follow track handler credentials)))
+  (def g (start-stream server-state))
 
-  (stop-stream)
+  (>!! (first g) {:topic :stop-stream})
 
   (def stop-server
     (do
       (timbre/set-config! [:appenders :spit :enabled?] true)
       (timbre/set-config! [:shared-appender-config :spit-filename] (:logfile @server-state))
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
+
+  (stop-server)
 
   )
