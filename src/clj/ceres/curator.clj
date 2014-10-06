@@ -195,6 +195,12 @@
          delays)
        (zip/next loc)))))
 
+(defn build-tree-from-source [id]
+  (let [origin (mc/find-map-by-id @db "origins" id)
+        tree (compute-impact-tree origin)]
+    {:title (:title (mc/find-map-by-id @db "articles" (:article origin)))
+     :tree tree
+     :analysis (analyze-tree tree)}))
 
 (defn random-tree []
   (let [origin (rand-nth (mc/find-maps @db "origins" {:source {$in news-accounts}}))
@@ -266,23 +272,35 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))) )))
 
+
+  (def some-tree (build-tree-from-source (ObjectId. "53fcc425e4b09b711bdec9a9" )))
+
+  ;; "53fcc425e4b09b711bdec9a9" "53fe02bbe4b09b711bdf26f2" "53f33d9ee4b0c2a12eb4a339" "53ff738fe4b09b711bdfa9c7"
+
+
   (def rand-tree (random-tree))
 
   (-> rand-tree :analysis :height)
 
+  (-> rand-tree :analysis :size)
+
+  (-> rand-tree :tree ffirst second :_id aprint)
+
+  (-> rand-tree :analysis aprint)
+
   (def g
     (let [vertices (loop [nodes []
-                          loc (:tree rand-tree)]
+                          loc (:tree some-tree)]
                      (if (zip/end? loc)
                        nodes
                        (recur
                         (if-let [node (zip/node loc)]
                           (if (= (zip/root loc) node)
                             (conj nodes (-> node :tweet :id_str))
-                            (conj nodes [(-> node :tweet :id_str) (-> loc zip/up zip/node :tweet :id_str)]))
+                            (conj nodes [(-> loc zip/up zip/node :tweet :id_str) (-> node :tweet :id_str)]))
                           nodes)
                         (zip/next loc))))]
-      (apply graph vertices)))
+      (apply lg/digraph vertices)))
 
   (lio/view g)
 
@@ -372,14 +390,32 @@
     (view (line-chart time tweet-count))
     (view (line-chart (range 24) avg-tweets-per-hour)))
 
-  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 12)))
+
+  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 22)))
         dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/days 1)))
         tweet-count (map #(mc/count @db "tweets" {:created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
-        time (range days-running)]
-    (view (line-chart time tweet-count)))
+        days (range  2 (inc (inc days-running)))]
+    (view (line-chart days tweet-count :title "tweet counts" :y-label "Tweet Count" :x-label "Day")))
 
-  (->> (mc/count @db "tweets" {:created_at {$gt (t/date-time 2014 9 18)}})
-       aprint)
+
+  ;; user posts distribution
+  (let [users (->> (mc/find-maps
+                    @db "tweets"
+                    {:created_at {$gt (t/date-time 2014 7 2)}}
+                    ["user.screen_name"])
+                   (pmap #(-> % :user :screen_name))
+                   frequencies)
+        unique-posters #(float (/ (count %) (count users)))]
+    (view (histogram (filter #(< % 51) (vals users)) :nbins 50)))
+
+
+  ;; news posts fraction
+  (let [overall-count (mc/count @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)}})
+        news-count (mc/count
+                    @db "tweets" {$and [{:created_at {$gt (t/date-time 2014 7 1)}}
+                                        {:user.screen_name {$in news-accounts} }]})]
+    (aprint (float (/ news-count overall-count))))
+
 
 
 
