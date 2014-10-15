@@ -24,14 +24,12 @@
             [ceres.collector :refer [db custom-formatter news-accounts store]])
  (:import org.bson.types.ObjectId))
 
-
 (defrecord Source [name articles])
 (defrecord Article [source tweet reactions])
 (defrecord Reaction [tweet reactions])
 
 (def tokenize (make-tokenizer "data/de-token.bin"))
 (def stopwords (read-string "data/stopwords.txt"))
-
 
 ;; --- DATA MINING ---
 
@@ -94,20 +92,20 @@
   "Find all tweets that are related to a given tweet by a retweet or reply"
   [tweet]
   (let [tweet-id (:id_str tweet)
-        neighbor-tweets (->> (mc/find-maps
-                              @db
-                              "tweets"
-                              {$and [{$or [{"retweeted_status.id_str" tweet-id}
-                                           {"in_reply_to_status_id_str" tweet-id}]}
-                                     {:created_at {$gt (t/date-time 2014 7 1)}}]}))]
-    (Reaction. tweet (vec (doall (pmap spread neighbor-tweets))))))
+        neighbor-tweets (mc/find-maps
+                         @db
+                         "tweets"
+                         {$and [{$or [{"retweeted_status.id_str" tweet-id}
+                                      {"in_reply_to_status_id_str" tweet-id}]}
+                                {:created_at {$gt (t/date-time 2014 7 1)}}]})]
+    (Reaction. tweet (vec (pmap spread neighbor-tweets)))))
 
 
 (defn compute-impact-tree
   "Create the impact tree using clojure zippers"
   [origin]
   (let [article (if (:article origin)
-                      (mc/find-map-by-id @db "articles" (:article origin))
+                  (mc/find-map-by-id @db "articles" (:article origin))
                       nil)
         tweet (mc/find-map-by-id @db "tweets" (:tweet origin))]
     (let [related-origins (if article
@@ -117,12 +115,12 @@
                                   (pmap #(mc/find-map-by-id @db "tweets" %))
                                   (filter #(or (nil? (-> % :retweeted_status :id_str)) (= (-> % :retweeted_status :id_str) (:id_str tweet)))))
                              nil)
-          related-tweets (->> (mc/find-maps
-                                @db
-                                "tweets"
-                                {$and [{$or [{"retweeted_status.id_str" (:id_str tweet)}
-                                             {"in_reply_to_status_id_str" (:id_str tweet)}]}
-                                       {:created_at {$gt (t/date-time 2014 7 1)}}]}))
+          related-tweets (mc/find-maps
+                          @db
+                          "tweets"
+                          {$and [{$or [{"retweeted_status.id_str" (:id_str tweet)}
+                                       {"in_reply_to_status_id_str" (:id_str tweet)}]}
+                                 {:created_at {$gt (t/date-time 2014 7 1)}}]})
           merged-articles (into related-origins related-tweets)]
       (zip/zipper
        (fn [node] true)
@@ -141,7 +139,8 @@
 (defn compute-impact-forest
   "Compute article impact forest of given news source"
   [source]
-  (let [source-origins (mc/find-maps @db "origins" {:source source})]
+  (let [source-origins (mc/find-maps @db "origins" {:source source :ts {$gt (t/date-time 2014 7 1)
+                                                                        $lt (t/date-time 2014 8 1)}})]
     (vec (pmap compute-impact-tree source-origins))))
 
 
@@ -195,12 +194,14 @@
          delays)
        (zip/next loc)))))
 
+
 (defn build-tree-from-source [id]
   (let [origin (mc/find-map-by-id @db "origins" id)
         tree (compute-impact-tree origin)]
     {:title (:title (mc/find-map-by-id @db "articles" (:article origin)))
      :tree tree
      :analysis (analyze-tree tree)}))
+
 
 (defn random-tree []
   (let [origin (rand-nth (mc/find-maps @db "origins" {:source {$in news-accounts}}))
@@ -212,7 +213,7 @@
 
 (defn compute-summary [source]
   (let [impact-forest (compute-impact-forest source)
-        analytics (map analyze-tree impact-forest)
+        analytics (pmap analyze-tree impact-forest)
         sizes (map :size analytics)
         pub-times (map :pub-times analytics)
         heights (map :height analytics)
@@ -255,6 +256,7 @@
         "--query" (str "{" (if (= coll "tweets") "created_at" "ts") " : {$gte : new Date(" (c/to-long date) "), $lt : new Date(" (c/to-long day-after) ")}}")
         "--out" file-path)))
 
+
 (defn backup-yesterday
   "Write last day's collection to specific folder"
   [database coll folder-path]
@@ -272,13 +274,20 @@
       (:_id x)
       (update-in x [:created_at] #(f/parse custom-formatter (:created_at %))) )))
 
+  (mc/indexes-on @db "tweets")
 
   (def some-tree (build-tree-from-source (ObjectId. "53fcc425e4b09b711bdec9a9" )))
 
   ;; "53fcc425e4b09b711bdec9a9" "53fe02bbe4b09b711bdf26f2" "53f33d9ee4b0c2a12eb4a339" "53ff738fe4b09b711bdfa9c7"
 
+  (def rand-tree (time (random-tree)))
 
-  (def rand-tree (random-tree))
+  (loop [counter 10]
+    (if (= counter 0)
+      :true
+      (do (time (random-tree))
+          (recur (dec counter)))))
+
 
   (-> rand-tree :analysis :height)
 
@@ -290,7 +299,7 @@
 
   (def g
     (let [vertices (loop [nodes []
-                          loc (:tree some-tree)]
+                          loc (:tree rand-tree)]
                      (if (zip/end? loc)
                        nodes
                        (recur
@@ -314,7 +323,7 @@
 
 
 
-  (def sum-tagesschau (compute-summary "tagesschau"))
+  (def sum-tagesschau (time (compute-summary "tagesschau")))
 
   (def sum-faz (compute-summary "FAZ_NET"))
 
@@ -362,7 +371,7 @@
 
 
   ;; tweet counts
-  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 15)))
+  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 10 12)))
         dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/days 1)))
         sz-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "SZ" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
         spon-tweet-count (map #(mc/count @db "tweets" {:user.screen_name "SPIEGELONLINE" :created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
@@ -377,7 +386,7 @@
     (view (line-chart days-since-start tweet-counts :legend true :group-by grouping)))
 
 
-  (let [days-running (t/in-hours (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 12)))
+  (let [days-running (t/in-hours (t/interval (t/date-time 2014 7 2) (t/date-time 2014 10 12)))
         dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/hours 1)))
         tweet-count (map #(mc/count @db "tweets" {:created_at {$gte % $lt (t/plus % (t/hours 1))}}) dates)
         time (range days-running)
@@ -391,22 +400,30 @@
     (view (line-chart (range 24) avg-tweets-per-hour)))
 
 
-  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 9 22)))
+  (let [days-running (t/in-days (t/interval (t/date-time 2014 7 2) (t/date-time 2014 10 13)))
         dates (take days-running (p/periodic-seq (t/date-time 2014 7 2) (t/days 1)))
         tweet-count (map #(mc/count @db "tweets" {:created_at {$gte % $lt (t/plus % (t/days 1))}}) dates)
         days (range  2 (inc (inc days-running)))]
-    (view (line-chart days tweet-count :title "tweet counts" :y-label "Tweet Count" :x-label "Day")))
+    (view (scatter-plot days tweet-count :title "tweet counts" :y-label "Tweet Count" :x-label "Day")))
 
 
   ;; user posts distribution
   (let [users (->> (mc/find-maps
                     @db "tweets"
-                    {:created_at {$gt (t/date-time 2014 7 2)}}
-                    ["user.screen_name"])
+                    {$and
+                     [
+                      {:created_at {$gt (t/date-time 2014 7 1)
+                                    $lt (t/date-time 2014 10 1)}}
+                      {:user.screen_name {$ne news-accounts}}]
+                     ["user.screen_name"]})
                    (pmap #(-> % :user :screen_name))
                    frequencies)
-        unique-posters #(float (/ (count %) (count users)))]
-    (view (histogram (filter #(< % 51) (vals users)) :nbins 50)))
+        unique-posters #(float (/ (count %) (count users)))
+        post-counter (frequencies (vals users))]
+    (->> users
+         (sort-by second >)
+         (take 10)
+         aprint))
 
 
   ;; news posts fraction
@@ -416,9 +433,29 @@
                                         {:user.screen_name {$in news-accounts} }]})]
     (aprint (float (/ news-count overall-count))))
 
+  (def origin (time (rand-nth (mc/find-maps @db "origins" {:source {$in news-accounts}}))))
+
+  (println "\n")
+
+  (def tree (time (compute-impact-tree origin)))
+
+  (def dpa-sum (time (compute-summary "dpa")))
+
+  (aprint (keys dpa-sum))
+
+  (def tagesschau-sum (time (compute-summary "tagesschau")))
+
+  (aprint (dissoc dpa-sum :heights :sizes :users :hashtags :pub-times :no-reactions :delays))
 
 
-
+  (->> (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                $lt (t/date-time 2014 10 1)}}
+                     [:user.id_str])
+       (pmap #(-> % :user :id_str))
+       (into #{})
+       count
+       aprint
+       time)
 
   )
 
