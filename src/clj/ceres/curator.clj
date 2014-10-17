@@ -156,7 +156,7 @@
   (loop [counter 0
          max-path 0
          users []
-         tokens []
+         ;;tokens []
          pub-times []
          hashtags []
          delays []
@@ -165,7 +165,7 @@
       {:size counter
        :height max-path
        :users users
-       :tokens tokens
+       ;;:tokens tokens
        :pub-times pub-times
        :hashtags (mapv #(-> % :text clojure.string/lower-case) hashtags)
        :delays delays}
@@ -180,7 +180,7 @@
          (let [user (-> node :tweet :user)]
              (conj users (:screen_name user)))
          users)
-       (if (zip/node loc)
+       #_(if (zip/node loc)
          (conj
           tokens
           (clojure.set/difference
