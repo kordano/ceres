@@ -299,7 +299,7 @@
 
   (def g
     (let [vertices (loop [nodes []
-                          loc (:tree rand-tree)]
+                          loc (:tree some-tree)]
                      (if (zip/end? loc)
                        nodes
                        (recur
@@ -385,6 +385,24 @@
                         (remove #(= % 0))
                         (reduce +))]
     (aprint (/ (float (/ delay-sum (count (remove #(= % 0) (:delays dpa-sum))))) 60)))
+
+
+  (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 9 29)
+                                                        $lt (t/date-time 2014 9 30)}})]
+
+    (->> tweets
+         first
+         :user
+         keys
+         aprint))
+
+  (sh "mongoexport"
+        "--port" "27017"
+        "--host" (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1")
+        "--db" "athena"
+        "--collection" "tweets"
+        "--query" (str "{"  "created_at : {$gte : new Date(" (c/to-long (t/date-time 2014 7 1)) "), $lt : new Date(" (c/to-long (t/date-time 2014 10 1)) ")}}")
+        "--out" "/home/konny/tmp/tweets.json")
 
   )
 
