@@ -1,5 +1,5 @@
-[;; --- Article ---
- {:db/id #db/id[:db.part/db]
+;; --- Article ---
+[{:db/id #db/id[:db.part/db]
   :db/ident :article/url
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
@@ -29,11 +29,11 @@
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/one
   :db/doc "An article's original tweet"
-  :db.install/_attribute :db.part/db}
+  :db.install/_attribute :db.part/db}]
 
 
- ;; --- Tweet ---
- {:db/id #db/id[:db.part/db]
+;; --- Tweet ---
+[{:db/id #db/id[:db.part/db]
   :db/ident :tweet/user
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/one
@@ -69,12 +69,12 @@
  {:db/id #db/id[:db.part/tweet -5]
   :db/ident :tweet.type/source}
 
-{:db/id #db/id[:db.part/db]
+ {:db/id #db/id[:db.part/db]
   :db/ident :tweet/hashtags
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/many
   :db/doc "A tweet's hashtags"
- :db.install/_attribute :db.part/db}
+  :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]
   :db/ident :tweet/id
@@ -89,11 +89,11 @@
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/many
   :db/doc "A tweet's reactions"
-  :db.install/_attribute :db.part/db}
+  :db.install/_attribute :db.part/db}]
 
 
- ;; --- User ---
- {:db/id #db/id[:db.part/db]
+;; --- User ---
+[{:db/id #db/id[:db.part/db]
   :db/ident :user/screen-name
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
@@ -120,18 +120,15 @@
   :db/valueType :db.type/long
   :db/cardinality :db.cardinality/one
   :db/doc "A users's follower count"
-  :db.install/_attribute :db.part/db}
+  :db.install/_attribute :db.part/db}]
 
 
- ;; --- Hashtag ---
- {:db/id #db/id[:db.part/db]
-  :db/ident :hashtag/text
+;; --- Hashtag ---
+[{:db/id #db/id[:db.part/db]
+  :db/ident :hashtag/name
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
   :db/index true
   :db/fulltext true
   :db/doc "A hashtags's text"
-  :db.install/_attribute :db.part/db}
-
-
- ]
+  :db.install/_attribute :db.part/db}]
