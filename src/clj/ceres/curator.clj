@@ -225,20 +225,12 @@
   (let [impact-forest (compute-impact-forest source)
         analytics (pmap analyze-tree impact-forest)
         sizes (map :size analytics)
-        pub-times (map :pub-times analytics)
         heights (map :height analytics)
-        delays (apply concat (map :delays analytics))
         users (->> analytics (map :users) (apply concat))
-        hashtags (->> analytics (map :hashtags) flatten)
         overall-size (reduce + sizes)]
     {:source source
      :article-count (count impact-forest)
-     :users users
-     :hashtags hashtags
-     :pub-times pub-times
-     :heights heights
-     :sizes sizes
-     :delays delays
+     :analytics analytics
      :total-impact overall-size
      :avg-impact (float (/ overall-size (count sizes)))
      :no-reactions (float (/ (count (filter #(< % 1) heights)) (count heights)))
