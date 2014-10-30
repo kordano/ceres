@@ -14,11 +14,12 @@
 
 (timbre/refer-timbre)
 
-
 (def db (atom
          (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
                ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
            (mg/get-db (mg/connect sa opts) "athena"))))
+
+
 
 (defn set-db [name]
   (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
@@ -42,11 +43,12 @@
     (mc/ensure-index @db "tweets" (array-map :id_str 1))
     (mc/ensure-index @db "tweets" (array-map :retweeted_status.id_str 1))
     (mc/ensure-index @db "tweets" (array-map :in_reply_to_status_id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :in_reply_to_user_id_str 1))
     (mc/ensure-index @db "tweets" (array-map :created_at 1))
     (mc/ensure-index @db "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
 
 
-(defn- expand-url
+(defn expand-url
   "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
   [url-str]
   (let [url (java.net.URL. url-str)

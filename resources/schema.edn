@@ -1,37 +1,3 @@
-;; --- Article ---
-[{:db/id #db/id[:db.part/db]
-  :db/ident :article/url
-  :db/valueType :db.type/string
-  :db/cardinality :db.cardinality/one
-  :db/fulltext true
-  :db/index true
-  :db/unique :db/unique/identity
-  :db/doc "An article's url"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :publish/at
-  :db/valueType :db.type/instant
-  :db/cardinality :db.cardinality/one
-  :db/index true
-  :db/doc "An article's publication time"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :article/reactions
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/many
-  :db/doc "Article's reactions"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :article/tweet
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/one
-  :db/doc "An article's original tweet"
-  :db.install/_attribute :db.part/db}]
-
-
 ;; --- Tweet ---
 [{:db/id #db/id[:db.part/db]
   :db/ident :tweet/user
@@ -69,6 +35,9 @@
  {:db/id #db/id[:db.part/tweet -5]
   :db/ident :tweet.type/source}
 
+ {:db/id #db/id[:db.part/tweet -6]
+  :db/ident :tweet.type/article}
+
  {:db/id #db/id[:db.part/db]
   :db/ident :tweet/hashtags
   :db/valueType :db.type/ref
@@ -89,6 +58,21 @@
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/many
   :db/doc "A tweet's reactions"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :tweet/mentions
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/many
+  :db/doc "A tweet's user mentions"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :tweet/url
+  :db/valueType :db.type/string
+  :db/fulltext true
+  :db/cardinality :db.cardinality/many
+  :db/doc "A tweet's url if exist"
   :db.install/_attribute :db.part/db}]
 
 
@@ -101,8 +85,8 @@
   :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]
-  :db/ident :user/name
-  :db/valueType :db.type/string
+  :db/ident :user/created
+  :db/valueType :db.type/instant
   :db/cardinality :db.cardinality/one
   :db/doc "A users's name "
   :db.install/_attribute :db.part/db}
@@ -128,7 +112,7 @@
   :db/ident :hashtag/name
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
-  :db/index true
+  :db/unique :db.unique/identity
   :db/fulltext true
   :db/doc "A hashtags's text"
   :db.install/_attribute :db.part/db}]
