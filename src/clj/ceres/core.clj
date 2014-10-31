@@ -117,6 +117,7 @@
       (go-loop [status (<! (:status-ch output))]
         (when status
           (stream-handler state status)
+          (info (str "Storing tweet " (:id status)))
           (recur (<! (:status-ch output))))))
     [in out]))
 
