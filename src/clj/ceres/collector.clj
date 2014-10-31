@@ -81,8 +81,9 @@
 (defn store-article
   "Fetch html document, extract title and store them"
   [{:keys [url content-type ts] :as expanded-url}]
-  (let [raw-html (slurp url)
-        html-title (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)]
+  (let [raw-html (if (= url "Not available") nil (slurp url))
+        html-title (if raw-html (-> (java.io.StringReader. raw-html) enlive/html-resource (enlive/select [:head :title]) first :content first)
+                       nil)]
     (mc/insert-and-return
      @db
      "articles"
