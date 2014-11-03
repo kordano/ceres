@@ -117,7 +117,6 @@
       (go-loop [status (<! (:status-ch output))]
         (when status
           (stream-handler state status)
-          (info (str "Storing tweet " (:id status)))
           (recur (<! (:status-ch output))))))
     [in out]))
 
@@ -162,5 +161,7 @@
       (run-server (site #'all-routes) {:port (:port @server-state) :join? false})))
 
   (stop-server)
+
+  @server-state
 
   )
