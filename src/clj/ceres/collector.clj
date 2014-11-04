@@ -6,6 +6,7 @@
             [monger.conversion :refer [from-db-object]]
             [monger.query :refer :all]
             [monger.joda-time]
+            [aprint.core :refer [aprint]]
             [net.cgrand.enlive-html :as enlive]
             [clj-time.format :as f]
             [taoensso.timbre :as timbre]
@@ -137,3 +138,72 @@
                  origin (store-origin (assoc % :article (:_id article) :record oid :ts ts :source source))]
              {:article (update-in article [:ts] (fn [x] (f/unparse custom-formatter x))) :origin (str (:_id origin))}))
         articles)))))
+
+
+
+(defn store-user [{{:keys [id screen_name followers_count created_at]} :user}]
+  (let [date (f/parse custom-formatter created_at)]
+      (mc/insert-and-return
+       @db
+       "user"
+       {:id id
+        :screen_name screen_name
+        :created_at date})))
+
+(defn store-followers-count [uid followers-count date]
+  (mc/insert
+   @db
+   "followers"
+   {:user uid
+    :followers-count followers-count
+    :date date}))
+
+
+(defn store-published [uid tid url-id type ts]
+  (mc/insert
+   @db
+   "published"
+   {:user uid
+    :tweet tid
+    :url url-id
+    :type type
+    :ts ts}))
+
+(defn store-url [url uid ts]
+  (mc/insert
+   @db
+   "url"
+   {:url url
+    :user uid
+    :ts ts}))
+
+(comment
+
+  (time
+   (letfn [(user-exists? [{{:keys [id]} :user}] (mc/find-one @db "user" {:id id}))]
+     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                           $lt (t/date-time 2014 8 1)}})]
+       (doall
+        (pmap #(when-not (user-exists? %) (store-user %)) tweets)))))
+
+
+
+  (time
+   (let [origins (mc/find-maps @db "origins" {:source {$ne nil}})]
+     (doall
+      (map
+       (fn [{:keys [article tweet ts source]}]
+         (let [uid (:_id (mc/find-one-as-map @db "user" {:screen_name source}))
+               url (if article
+                     (:url (mc/find-map-by-id @db "articles" article))
+                     nil)]
+           (if url
+             (store-url url uid ts)
+             :unknown)))
+       origins))))
+
+
+  (let [uid (:_id (mc/find-one-as-map @db "user" {:screen_name "SZ"}))]
+    (mc/count @db "url" {:user uid}))
+
+  )
