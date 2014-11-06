@@ -40,12 +40,16 @@
     (mc/ensure-index @db "articles" (array-map :ts 1))
     (mc/ensure-index @db "origins" (array-map :ts 1))
     (mc/ensure-index @db "origins" (array-map :source 1))
-    (mc/ensure-index @db "url" (array-map :url 1))
-    (mc/ensure-index @db "user" (array-map :id 1))
+    (mc/ensure-index @db "urls" (array-map :url 1))
+    (mc/ensure-index @db "hashtags" (array-map :text 1))
+    (mc/ensure-index @db "users" (array-map :id 1))
     (mc/ensure-index @db "tweets" (array-map :user.screen_name 1))
     (mc/ensure-index @db "tweets" (array-map :id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :id 1))
     (mc/ensure-index @db "tweets" (array-map :retweeted_status.id_str 1))
     (mc/ensure-index @db "tweets" (array-map :in_reply_to_status_id_str 1))
+    (mc/ensure-index @db "tweets" (array-map :retweeted_status.id 1))
+    (mc/ensure-index @db "tweets" (array-map :in_reply_to_status_id 1))
     (mc/ensure-index @db "tweets" (array-map :in_reply_to_user_id_str 1))
     (mc/ensure-index @db "tweets" (array-map :created_at 1))
     (mc/ensure-index @db "tweets" (array-map :entities.user_mentions.screen_name 1 :retweeted_status.user.screen_name 1 :in_reply_to_screen_name 1))))
@@ -55,18 +59,27 @@
   "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
   [url-str]
   (let [url (java.net.URL. url-str)
-        conn (.openConnection url)]
-    (do (.setInstanceFollowRedirects conn false)
-        (.connect conn)
-        (let [expanded-url (.getHeaderField conn "Location")
-              content-type (.getContentType conn)]
+        conn (try
+               (.openConnection url)
+               (catch Exception e (do (error (str e))
+                                      false)))]
+    (if conn
+      (do (.setInstanceFollowRedirects conn false)
           (try
-            (do (.close (.getInputStream conn))
-                {:url expanded-url
-                 :content-type content-type})
+            (do
+              (.connect conn)
+              (let [expanded-url (.getHeaderField conn "Location")
+                    content-type (.getContentType conn)]
+                (try
+                  (do (.close (.getInputStream conn))
+                      {:url expanded-url
+                       :content-type content-type})
+                  (catch Exception e (do (error (str e))
+                                         {:url "Not available"
+                                          :content-type content-type})))))
             (catch Exception e (do (error (str e))
-                                   {:url "Not available"
-                                    :content-type content-type})))))))
+                                   nil))))
+      nil)))
 
 
 (defn store-origin
@@ -147,7 +160,7 @@
   (let [date (f/parse custom-formatter created_at)]
       (mc/insert-and-return
        @db
-       "user"
+       "users"
        {:id id
         :screen_name screen_name
         :created_at date})))
@@ -161,7 +174,7 @@
     :date date}))
 
 
-(defn store-published [uid tid url-id type ts]
+(defn store-published [uid tid url-id type hids ts]
   (mc/insert
    @db
    "published"
@@ -169,24 +182,39 @@
     :tweet tid
     :url url-id
     :type type
+    :hashtags hids
     :ts ts}))
 
 
-(defn store-url [url uid ts]
+(defn store-url [url uid tid ts]
   (mc/insert
    @db
-   "url"
+   "urls"
    {:url url
     :user uid
+    :tweet tid
     :ts ts}))
 
+(defn store-tmp-url [url uid tid ts]
+  (mc/insert
+   @db
+   "tmpurls"
+   {:url url
+    :user uid
+    :tweet tid
+    :ts ts}))
 
+(defn store-hashtag [text]
+  (mc/insert
+   @db
+   "hashtags"
+   {:text text}))
 
 (comment
 
   ;; export users
   (time
-   (letfn [(user-exists? [{{:keys [id]} :user}] (mc/find-one @db "user" {:id id}))]
+   (letfn [(user-exists? [{{:keys [id]} :user}] (mc/find-one @db "users" {:id id}))]
      (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 9 1)
                                                            $lt (t/date-time 2014 10 1)}})]
        (doall
@@ -194,28 +222,28 @@
 
 
 
+
   ;; export urls
   (time
-   (let [origins (mc/find-maps @db "origins" {:source {$ne nil}})]
-     (doall
-      (map
-       (fn [{:keys [article tweet ts source]}]
-         (let [uid (:_id (mc/find-one-as-map @db "user" {:screen_name source}))
-               url (if article
-                     (:url (mc/find-map-by-id @db "articles" article))
-                     nil)]
-           (if url
-             (store-url url uid ts)
-             :unknown)))
-       origins))))
+   (do
+     (println "Export-urls")
+     (let [origins (mc/find-maps @db "origins" {:source {$ne nil}})]
+       (doall
+        (map
+         (fn [{:keys [article tweet ts source]}]
+           (let [uid (:_id (mc/find-one-as-map @db "users" {:screen_name source}))
+                 url (if article
+                       (:url (mc/find-map-by-id @db "articles" article))
+                       nil)]
+             (if url
+               (store-url url uid tweet ts)
+               :unknown)))
+         origins)))))
 
 
   ;; export un-parsed urls
   (letfn [(expand-urls [{{:keys [urls]} :entities}]
-            (pmap #(let [expanded-url (expand-url (:expanded_url %))]
-                    (if expanded-url
-                      (:url expanded-url)
-                      %)) urls))]
+            (pmap :expanded_url urls))]
     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
                                                           $lt (t/date-time 2014 7 29)}
                                              :entities.urls {$ne []}
@@ -225,9 +253,9 @@
         (pmap
          (fn [tweet]
            (let [urls (expand-urls tweet)
-                 uid (:_id (mc/find-one-as-map @db "user" {:screen_name (-> tweet :user :screen_name)}))]
+                 uid (:_id (mc/find-one-as-map @db "users" {:screen_name (-> tweet :user :screen_name)}))]
              (pmap
-              #(store-url % uid (:created_at tweet))
+              #(store-tmp-url % uid (:_id tweet) (:created_at tweet))
               urls)))
          tweets)))))
 
@@ -237,7 +265,7 @@
               (:_id (mc/find-one-as-map @db "url" {:url (-> urls first :url expand-url :url)}))
               nil))
           (get-uid [{{id :id} :user}]
-            (:_id (mc/find-one-as-map @db "user" {:id id})))
+            (:_id (mc/find-one-as-map @db "users" {:id id})))
           (dispatch-tweet [{:keys [retweeted_status in_reply_to_status_id]}]
             (if in_reply_to_status_id
               :reply
@@ -270,19 +298,93 @@
                                          (get-type % url-id)
                                          (:created_at %)))))))))
 
-  (->> (mc/count @db "url" {:ts {$lt (t/date-time 2014 7 29)}})
-       aprint)
 
-  (time (->> (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                      $lt (t/date-time 2014 7 29)}
-                                         :entities.urls {$ne []}
-                                         :user.screen_name {$in news-accounts}})
-             count))
 
-  (->> (mc/find-maps @db "url" {:ts {$gt (t/date-time 2014 7 1)
-                                     $lt (t/date-time 2014 7 29)}})
-       (map :user)
-       frequencies
-       aprint)
+  ;; export published news tweets
+  (letfn [(dispatch-type [{:keys [entities retweeted_status in_reply_to_status_id]}]
+            (if in_reply_to_status_id
+              :reply
+              (if-not (empty? retweeted_status)
+                :retweet
+                :source)))
+          (transact-published [{:keys [user ]}])]
+    (doall
+     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                           $lt (t/date-time 2014 10 1)}
+                                              :user.screen_name {$in news-accounts}})]
+       (->> tweets
+            (pmap #(store-published ))
+            aprint))))
+
+
+  ;; export tmp urls
+  (letfn [(x-url [url]
+            (let [expanded-url (-> url :url expand-url :url)]
+              (if expanded-url
+                expanded-url
+                url)))]
+    (time
+     (do
+       (println "Export tmp urls")
+       (doall
+        (->> (mc/find-maps @db "tmpurls")
+             (pmap (fn [{:keys [user tweet ts] :as url}]
+                     (store-url (x-url url) user tweet ts))))))))
+
+
+  ;; export all hashtags
+  (letfn [(extract-hashtags [{{:keys [hashtags]} :entities}]
+            (pmap :text hashtags))]
+    (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                          $lt (t/date-time 2014 10 1)}
+                                             :entities.hashtags {$ne []}})]
+      (time
+       (doall
+        (->> tweets
+             (pmap extract-hashtags)
+             flatten
+             (into #{})
+             (pmap store-hashtag))))))
+
+
+  (letfn [(dispatch-type [{:keys [in_reply_to_status_id retweeted_status entities]}]
+            (if in_reply_to_status_id
+              :reply
+              (if retweeted_status
+                :retweet
+                (if-not (empty? (:urls entities))
+                  :source
+                  :unrelated))))
+          (transact-published [{:keys [user _id entities created_at] :as tweet}]
+            (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
+                  url-id (if-not (empty? (:urls entities))
+                           (:_id (mc/find-one-as-map @db "urls" (:tweet _id)))
+                           nil)
+                  hids (if-not (empty? (:hashtags entities))
+                         (->> (:hashtags entities)
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (into #{})
+                              vec)
+                         nil)
+                  t-type (dispatch-type tweet)]
+              (store-published uid _id url-id t-type hids created_at)))]
+    (let [tweets (mc/find-maps @db "tweets"
+                               {:created_at {$gt (t/date-time 2014 7 1)
+                                             $lt (t/date-time 2014 10 1)}
+                                :user.screen_name {$in news-accounts}})]
+      (time
+       (doall
+        (pmap transact-published tweets)))))
+
+  (->> (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                $lt (t/date-time 2014 10 1)}
+                                   :in_reply_to_status_id nil
+                                   :retweeted_status.id nil
+                                   :entities.urls {$ne []}
+                                   :user.screen_name {$nin news-accounts}})
+       count
+       aprint
+       time)
+
 
 )
