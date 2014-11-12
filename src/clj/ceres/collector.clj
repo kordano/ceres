@@ -234,7 +234,7 @@
   ;; export users
   (time
    (letfn [(user-exists? [{{:keys [id]} :user}] (mc/find-one @db "users" {:id id}))]
-     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 9 1)
+     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
                                                            $lt (t/date-time 2014 10 1)}})]
        (doall
         (pmap #(when-not (user-exists? %) (store-user %)) tweets)))))
@@ -319,23 +319,6 @@
 
 
 
-  ;; export published news tweets
-  (letfn [(dispatch-type [{:keys [entities retweeted_status in_reply_to_status_id]}]
-            (if in_reply_to_status_id
-              :reply
-              (if-not (empty? retweeted_status)
-                :retweet
-                :source)))
-          (transact-published [{:keys [user ]}])]
-    (doall
-     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                           $lt (t/date-time 2014 10 1)}
-                                              :user.screen_name {$in news-accounts}})]
-       (->> tweets
-            (pmap #(store-published ))
-            aprint))))
-
-
   ;; export tmp urls
   (letfn [(x-url [url]
             (let [expanded-url (-> url :url expand-url :url)]
@@ -365,7 +348,7 @@
              (into #{})
              (pmap store-hashtag))))))
 
-
+  ;; export news publications
   (letfn [(dispatch-type [{:keys [in_reply_to_status_id retweeted_status entities]}]
             (if in_reply_to_status_id
               :reply
@@ -386,11 +369,9 @@
                               vec)
                          nil)
                   t-type (dispatch-type tweet)]
-              (store-published uid _id url-id t-type hids created_at)))]
-    (let [tweets (mc/find-maps @db "tweets"
-                               {:created_at {$gt (t/date-time 2014 7 1)
-                                             $lt (t/date-time 2014 10 1)}
-                                :user.screen_name {$in news-accounts}})]
+              (do
+                (store-published uid _id url-id t-type hids created_at))))]
+    (let [tweets (mc/find-maps @db "tweets" {:user.screen_name {$in news-accounts}})]
       (time
        (doall
         (pmap transact-published tweets)))))
@@ -413,11 +394,51 @@
               (do
                 (doall (pmap #(when-not (nil? %) (store-mention % pub-id)) user-mentions))
                 (store-reaction pub-id source-tid))))]
-    (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                            $lt (t/date-time 2014 8 1)}
-                                               :retweeted_status {$ne nil}
+    (let [retweets (mc/find-maps @db "tweets" {:retweeted_status {$ne nil}
                                                :user.screen_name {$nin news-accounts}})]
       (time (doall (pmap transact-published retweets)))))
 
 
-)
+
+  ;; export replies
+  (letfn [(transact-published [{:keys [user _id created_at entities id_str in_reply_to_status_id_str] :as tweet}]
+            (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
+                  hids (if-not (empty? (:hashtags entities))
+                         (->> (:hashtags entities)
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (into #{})
+                              vec)
+                         nil)
+                  user-mentions (if-not (empty (:user_mentions entities))
+                                  (->> (:user_mentions entities)
+                                       (pmap #(:_id (mc/find-one-as-map @db "users" {:id (:id %)}))))
+                                  #{})
+                  pub-id (store-published uid _id nil :reply hids created_at)
+                  source-tid (:_id (mc/find-one-as-map @db "published" {:tweet (:_id (mc/find-one-as-map @db "tweets" {:id_str in_reply_to_status_id_str}))}))]
+              (do
+                (doall (pmap #(when-not (nil? %) (store-mention % pub-id)) user-mentions))
+                (store-reaction pub-id source-tid))))]
+    (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
+                                                            $lt (t/date-time 2014 10 1)}
+                                               :in_reply_to_status_id_str {$ne nil}
+                                               :user.screen_name {$nin news-accounts}})]
+      (time (doall (pmap transact-published retweets)))))
+
+
+  ;; find all shares
+  (time (aprint (mc/count @db "tweets"  {:user.screen_name {$nin news-accounts}
+                                         :in_reply_to_status_id_str nil
+                                         :retweeted_status nil
+                                         :entities.urls {$ne []}})))
+
+
+  (letfn [(find-related [{:keys [_id]}]
+            (mc/count @db "reactions" {:source _id}))]
+    (->> (mc/find-maps @db "published" {:url {$ne nil} :ts {$gt (t/date-time 2014 8 1)}})
+         (take 1000)
+         (pmap find-related)
+         (apply max)
+         time))
+
+
+  )
