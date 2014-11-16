@@ -234,8 +234,8 @@
   ;; export users
   (time
    (letfn [(user-exists? [{{:keys [id]} :user}] (mc/find-one @db "users" {:id id}))]
-     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 9 1)
-                                                           $lt (t/date-time 2014 10 1)}})]
+     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
+                                                           $lt (t/date-time 2014 9 1)}})]
        (doall
         (pmap #(when-not (user-exists? %) (store-user %)) tweets)))))
 
@@ -246,7 +246,9 @@
   (time
    (do
      (println "Export-urls")
-     (let [origins (mc/find-maps @db "origins" {:source {$ne nil}})]
+     (let [origins (mc/find-maps @db "origins" {:source {$ne nil}
+                                                :ts {$gt (t/date-time 2014 8 1)
+                                                     $lt (t/date-time 2014 9 1)}})]
        (doall
         (map
          (fn [{:keys [article tweet ts source]}]
@@ -319,23 +321,6 @@
 
 
 
-  ;; export published news tweets
-  (letfn [(dispatch-type [{:keys [entities retweeted_status in_reply_to_status_id]}]
-            (if in_reply_to_status_id
-              :reply
-              (if-not (empty? retweeted_status)
-                :retweet
-                :source)))
-          (transact-published [{:keys [user ]}])]
-    (doall
-     (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                           $lt (t/date-time 2014 10 1)}
-                                              :user.screen_name {$in news-accounts}})]
-       (->> tweets
-            (pmap #(store-published ))
-            aprint))))
-
-
   ;; export tmp urls
   (letfn [(x-url [url]
             (let [expanded-url (-> url :url expand-url :url)]
@@ -354,8 +339,8 @@
   ;; export all hashtags
   (letfn [(extract-hashtags [{{:keys [hashtags]} :entities}]
             (pmap :text hashtags))]
-    (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                          $lt (t/date-time 2014 10 1)}
+    (let [tweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
+                                                          $lt (t/date-time 2014 9 1)}
                                              :entities.hashtags {$ne []}})]
       (time
        (doall
@@ -388,8 +373,8 @@
                   t-type (dispatch-type tweet)]
               (store-published uid _id url-id t-type hids created_at)))]
     (let [tweets (mc/find-maps @db "tweets"
-                               {:created_at {$gt (t/date-time 2014 7 1)
-                                             $lt (t/date-time 2014 10 1)}
+                               {:created_at {$gt (t/date-time 2014 8 1)
+                                             $lt (t/date-time 2014 9 1)}
                                 :user.screen_name {$in news-accounts}})]
       (time
        (doall
@@ -413,11 +398,12 @@
               (do
                 (doall (pmap #(when-not (nil? %) (store-mention % pub-id)) user-mentions))
                 (store-reaction pub-id source-tid))))]
-    (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 7 1)
-                                                            $lt (t/date-time 2014 8 1)}
+    (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
+                                                            $lt (t/date-time 2014 9 1)}
                                                :retweeted_status {$ne nil}
                                                :user.screen_name {$nin news-accounts}})]
       (time (doall (pmap transact-published retweets)))))
+
 
 
 )
