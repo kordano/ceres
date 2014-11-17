@@ -9,6 +9,7 @@
             [aprint.core :refer [aprint]]
             [net.cgrand.enlive-html :as enlive]
             [clj-time.format :as f]
+            [speech-synthesis.say :as say]
             [taoensso.timbre :as timbre]
             [clj-time.core :as t])
   (:import org.bson.types.ObjectId))
@@ -455,6 +456,34 @@
            (pmap transact-published)))))
 
 
+  (time
+   (do
+     (doall
+      (pmap
+       (fn []
+         )
+       (mc/find-maps @db "published" {:type :retweet})))
+     ))
+
+
+  (time
+   (do
+     (say/say "Start computation")
+     (doall
+      (for [{:keys [tweet _id]} (mc/find-maps @db "published" {:type :retweet})]
+        (let [{{:keys [id_str]} :retweeted_status} (mc/find-map-by-id @db "tweets" tweet)
+              {stid :_id} (mc/find-one-as-map @db "tweets" {:id_str id_str})
+              {spid :_id} (if stid (mc/find-one-as-map @db "published" {:tweet stid})
+                              nil)]
+          (store-reaction _id spid))))
+     (say/say "Computation completed!")))
+
+
+  (->> (mc/find-maps @db "published" {:type :retweet})
+       (pmap :tweet)
+       (pmap type)
+       (into #{})
+       aprint)
 
 
   )

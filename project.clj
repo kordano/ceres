@@ -20,6 +20,7 @@
                  [http-kit "2.1.18"]
 
                  [com.datomic/datomic-free "0.9.4899"]
+                 [facts/speech-synthesis "1.0.0"]
 
                  [gezwitscher "0.1.1-SNAPSHOT"]
                  [com.novemberain/monger "2.0.0-rc1"]
