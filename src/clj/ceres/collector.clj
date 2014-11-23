@@ -505,47 +505,6 @@
 
   (defrecord Publication [source reactions])
 
-  (letfn [(find-reactions [{:keys [_id ts] :as pub}]
-            (let [reactions (mc/find-maps @db "reactions" {:source _id})]
-              (Publication. pid (mapv #(find-reactions (:publication %)) reactions))))
-          (impact [tree]
-            (loop [counter 0
-                   max-path 0
-                   delays []
-                   loc tree]
-              (if (zip/end? loc)
-                {:size counter
-                 :height max-path
-                 :delays}
-                (recur
-                 (if (zip/node loc) (inc counter) counter)
-                 (if (zip/node loc) (-> loc zip/path count (max max-path)) max-path)
-                 (if (zip/node loc)
-                   (let [pub-time (-> (zip/root tree) :pub :ts)
-                         post-delay (if (t/after? (-> loc zip/node :pub :ts) pub-time)
-                                      (t/interval pub-time (-> loc zip/node :pub :created_at))
-                                      (t/interval (-> loc zip/node :pub :created_at) pub-time))]
-           (conj delays (t/in-seconds post-delay)))
-         delays)
-                 (zip/next loc)))))
-          (reaction-tree [{:keys [_id]}]
-            (zip/zipper
-             (fn [node] true)
-             (fn [node] (:reactions node))
-             (fn [node new-children] (assoc-in node [:reactions] new-children))
-             (find-reactions _id)))
-          (avg [coll]
-            (float (/ (reduce + coll) (count coll))))]
-    (let [users (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
-          pubs (take 100 (mc/find-maps @db "published" {:user {$in users}}))
-          reaction-trees (pmap reaction-tree pubs)
-          impacts (pmap impact reaction-trees)]
-      (-> {:avg-size (avg (pmap :size impacts))
-           :avg-height (avg (pmap :height impacts))
-           :overall-size (reduce + (pmap :size impacts))
-           :max-height (apply max (pmap :height impacts))}
-          aprint
-          time)))
 
 
   (->> (mc/find-maps @db "users")
