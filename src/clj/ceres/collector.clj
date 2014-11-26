@@ -42,8 +42,9 @@
   []
   (do
     (mc/ensure-index @db "articles" (array-map :ts 1))
-    (mc/ensure-index @db "origins" (array-map :ts 1))
-    (mc/ensure-index @db "origins" (array-map :source 1))
+    (mc/ensure-index @db "origins" (array-map :ts 1 :source 1 :tweet 1))
+    (mc/ensure-index @db "published" (array-map :tweet 1 :user 1 :ts 1 :url 1))
+    (mc/ensure-index @db "reactions" (array-map :source 1 :tweet 1))
     (mc/ensure-index @db "urls" (array-map :url 1))
     (mc/ensure-index @db "hashtags" (array-map :text 1))
     (mc/ensure-index @db "users" (array-map :id 1))
@@ -492,26 +493,20 @@
   (time
    (do
      (say/say "Computation started")
-     (doall
-      (pmap
-       (fn [{:keys [tweet _id]}]
-         (let [{aid :article} (mc/find-one-as-map @db "origins" {:tweet tweet})
-               {source-tweet :tweet} (mc/find-one-as-map @db "origins" {:article aid :source {$ne nil}})]
-           (if source-tweet
-             (store-reaction tweet source-tweet)
-             nil)))
-       (mc/find-maps @db "published" {:type :share})))
+     (aprint
+      (reduce +
+              (pmap
+               (fn [{:keys [tweet _id]}]
+                 (let [{aid :article} (mc/find-one-as-map @db "origins" {:tweet tweet})
+                       {source-tweet :tweet} (mc/find-one-as-map @db "origins" {:article aid :source {$ne nil}})]
+                   (if source-tweet
+                     1
+                     0)))
+               (mc/find-maps @db "published" {:type :share}))))
      (say/say "Computation completed")))
 
-  (defrecord Publication [source reactions])
 
 
-
-  (->> (mc/find-maps @db "users")
-       (pmap #(mc/count @db "published" {:user %}))
-       frequencies
-       aprint
-       time)
 
 
 )
