@@ -212,12 +212,12 @@
 
 (defn store-mention
   "Yeah"
-  [uid tid]
+  [uid pid]
   (mc/insert
    @db
    "mentions"
    {:user uid
-    :tweet tid}))
+    :publication pid}))
 
 
 (defn store-hashtag [text]
@@ -506,6 +506,19 @@
      (say/say "Computation completed")))
 
 
+  (time
+   (doall
+    (pmap
+     (fn [{:keys [_id tweet]}]
+       (let [{{:keys [user_mentions]} :entities} (mc/find-map-by-id @db "tweets" tweet)]
+         (pmap
+          (fn [{:keys [id]}]
+            (let [uid (:_id (mc/find-one-as-map @db "users" {:id id}))]
+              (if uid
+                (store-mention uid _id)
+                nil)))
+          user_mentions)))
+     (mc/find-maps @db "published"))))
 
 
 
