@@ -51,17 +51,24 @@
        (zip/next loc)))))
 
 
+(defn hashtags-of-the-day [date]
+  (let [pubs (mc/find-maps @db "publications" {:ts {$gt date
+                                                    $lt (t/plus date (t/days 1))}})]
+    (->> pubs
+         (map :hashtags)
+         flatten
+         (remove nil?)
+         (pmap #(mc/find-map-by-id @db "hashtags" %))
+         (pmap :text)
+         frequencies
+         (sort-by second >)
+         (take 10)
+         keys)))
 
-(comment {}
 
-  ;; reaction to all publications
-  (let [users (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))]
-    (->> (mc/find-maps @db "published" {:user {$in users}})
-         (pmap #(find-reactions (:_id %)))
-         first
-         reaction-tree
-         aprint
-         time))
+(comment
+
+  (hashtags-of-the-day (t/date-time 2014 8 1))
 
 
   )
