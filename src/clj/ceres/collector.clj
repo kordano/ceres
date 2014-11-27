@@ -42,11 +42,19 @@
   []
   (do
     (mc/ensure-index @db "articles" (array-map :ts 1))
-    (mc/ensure-index @db "origins" (array-map :ts 1 :source 1 :tweet 1))
-    (mc/ensure-index @db "published" (array-map :tweet 1 :user 1 :ts 1 :url 1))
-    (mc/ensure-index @db "reactions" (array-map :source 1 :tweet 1))
+    (mc/ensure-index @db "origins" (array-map :ts 1))
+    (mc/ensure-index @db "origins" (array-map :source 1))
+    (mc/ensure-index @db "origins" (array-map :tweet 1))
+    (mc/ensure-index @db "publications" (array-map :tweet 1))
+    (mc/ensure-index @db "publications" (array-map :user 1))
+    (mc/ensure-index @db "publications" (array-map :ts 1))
+    (mc/ensure-index @db "publications" (array-map :url 1))
+    (mc/ensure-index @db "reactions" (array-map :source 1))
+    (mc/ensure-index @db "reactions" (array-map :publication 1))
     (mc/ensure-index @db "urls" (array-map :url 1))
     (mc/ensure-index @db "hashtags" (array-map :text 1))
+    (mc/ensure-index @db "mentions" (array-map :user 1))
+    (mc/ensure-index @db "mentions" (array-map :publication 1))
     (mc/ensure-index @db "users" (array-map :id 1))
     (mc/ensure-index @db "tweets" (array-map :user.screen_name 1))
     (mc/ensure-index @db "tweets" (array-map :id_str 1))
@@ -179,10 +187,10 @@
     :date date}))
 
 
-(defn store-published [uid tid url-id type hids ts]
+(defn store-publications [uid tid url-id type hids ts]
   (mc/insert-and-return
    @db
-   "published"
+   "publications"
    {:user uid
     :tweet tid
     :url url-id
@@ -320,7 +328,7 @@
              (take 10)
              (pmap get-url-id)
              #_(pmap #(let [url-id (get-url-id %)]
-                        (store-published (get-uid %)
+                        (store-publications (get-uid %)
                                          (:_id %)
                                          url-id
                                          (get-type % url-id)
@@ -354,6 +362,7 @@
         (->> tweets
              (pmap extract-hashtags)
              flatten
+             (remove nil?)
              (into #{})
              (pmap store-hashtag))))))
 
@@ -366,84 +375,73 @@
                 (if-not (empty? (:urls entities))
                   :source
                   :unrelated))))
-          (transact-published [{:keys [user _id entities created_at] :as tweet}]
+          (transact-publications [{:keys [user _id entities created_at] :as tweet}]
             (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
                   url-id (if-not (empty? (:urls entities))
                            (:_id (mc/find-one-as-map @db "urls" (:tweet _id)))
                            nil)
                   hids (if-not (empty? (:hashtags entities))
                          (->> (:hashtags entities)
-                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" {:text (:text %)})))
                               (into #{})
                               vec)
                          nil)
                   t-type (dispatch-type tweet)]
-              (store-published uid _id url-id t-type hids created_at)))]
+              (store-publications uid _id url-id t-type hids created_at)))]
     (let [tweets (mc/find-maps @db "tweets"
                                {:created_at {$gt (t/date-time 2014 8 1)
                                              $lt (t/date-time 2014 9 1)}
                                 :user.screen_name {$in news-accounts}})]
       (time
        (doall
-        (pmap transact-published tweets)))))
+        (pmap transact-publications tweets)))))
 
   ;; export retweets
-  (letfn [(transact-published [{:keys [user _id created_at entities id_str retweeted_status] :as tweet}]
+  (letfn [(transact-publications [{:keys [user _id created_at entities id_str retweeted_status] :as tweet}]
             (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
                   hids (if-not (empty? (:hashtags entities))
                          (->> (:hashtags entities)
-                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" {:text (:text %)})))
                               (into #{})
                               vec)
-                         nil)
-                  user-mentions (if-not (empty (:user_mentions entities))
-                                  (->> (:user_mentions entities)
-                                       (pmap #(:_id (mc/find-one-as-map @db "users" {:id (:id %)}))))
-                                  #{})
-                  pub-id (store-published uid _id nil :retweet hids created_at)]
-              (doall (pmap #(when-not (nil? %) (store-mention % pub-id)) user-mentions))))]
+                         nil)]
+              (store-publications uid _id nil :retweet hids created_at)))]
     (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
                                                             $lt (t/date-time 2014 9 1)}
                                                :retweeted_status {$ne nil}
                                                :user.screen_name {$nin news-accounts}})]
-      (time (doall (pmap transact-published retweets)))))
+      (time (doall (pmap transact-publications retweets)))))
 
 
 
   ;; export replies
-  (letfn [(transact-published [{:keys [user _id created_at entities id_str in_reply_to_status_id_str] :as tweet}]
+  (letfn [(transact-publications [{:keys [user _id created_at entities id_str in_reply_to_status_id_str] :as tweet}]
             (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
                   hids (if-not (empty? (:hashtags entities))
                          (->> (:hashtags entities)
-                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" {:text (:text %)})))
                               (into #{})
                               vec)
-                         nil)
-                  user-mentions (if-not (empty (:user_mentions entities))
-                                  (->> (:user_mentions entities)
-                                       (pmap #(:_id (mc/find-one-as-map @db "users" {:id (:id %)}))))
-                                  #{})
-                  pub-id (store-published uid _id nil :reply hids created_at)
-                  source-tid (:_id (mc/find-one-as-map @db "published" {:tweet (:_id (mc/find-one-as-map @db "tweets" {:id_str in_reply_to_status_id_str}))}))]
-              (doall (pmap #(when-not (nil? %) (store-mention % pub-id)) user-mentions))))]
+                         nil)]
+              (store-publications uid _id nil :reply hids created_at)))]
     (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
                                                             $lt (t/date-time 2014 9 1)}
                                                :in_reply_to_status_id_str {$ne nil}
                                                :user.screen_name {$nin news-accounts}})]
-      (time (doall (pmap transact-published retweets)))))
+      (time (doall (pmap transact-publications retweets)))))
 
 
 
   ;; export shares
-  (letfn [(transact-published [{:keys [user _id created_at entities id_str in_reply_to_status_id_str] :as tweet}]
+  (letfn [(transact-publications [{:keys [user _id created_at entities id_str in_reply_to_status_id_str] :as tweet}]
             (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
                   hids (if-not (empty? (:hashtags entities))
                          (->> (:hashtags entities)
-                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" (:text (:text %)))))
+                              (pmap #(:_id (mc/find-one-as-map @db "hashtags" {:text (:text %)})))
                               (into #{})
                               vec)
                          nil)]
-              (store-published uid _id nil :share hids created_at)))]
+              (store-publications uid _id nil :share hids created_at)))]
     (time
      (doall
       (->> (mc/find-maps @db "origins" {:source nil
@@ -456,7 +454,7 @@
                      :no-share
                      tweet)))
            (remove #{:no-share})
-           (pmap transact-published)))))
+           (pmap transact-publications)))))
 
 
   ;; retweet reactions
@@ -467,10 +465,10 @@
       (pmap (fn [{:keys [tweet _id]}]
              (let [{{:keys [id_str]} :retweeted_status} (mc/find-map-by-id @db "tweets" tweet)
                    {stid :_id} (mc/find-one-as-map @db "tweets" {:id_str id_str})
-                   {spid :_id} (if stid (mc/find-one-as-map @db "published" {:tweet stid})
+                   {spid :_id} (if stid (mc/find-one-as-map @db "publications" {:tweet stid})
                                    nil)]
                (store-reaction _id spid)))
-           (mc/find-maps @db "published" {:type :retweet})))
+           (mc/find-maps @db "publications" {:type :retweet})))
      (say/say "Computation completed!")))
 
 
@@ -482,10 +480,10 @@
       (pmap (fn [{:keys [tweet _id]}]
              (let [{:keys [in_reply_to_status_id_str]} (mc/find-map-by-id @db "tweets" tweet)
                    {stid :_id} (mc/find-one-as-map @db "tweets" {:id_str in_reply_to_status_id_str})
-                   {spid :_id} (if stid (mc/find-one-as-map @db "published" {:tweet stid})
+                   {spid :_id} (if stid (mc/find-one-as-map @db "publications" {:tweet stid})
                                    nil)]
                (store-reaction _id spid)))
-           (mc/find-maps @db "published" {:type :reply})))
+           (mc/find-maps @db "publications" {:type :reply})))
      (say/say "Computation completed")))
 
 
@@ -493,19 +491,19 @@
   (time
    (do
      (say/say "Computation started")
-     (aprint
-      (reduce +
-              (pmap
-               (fn [{:keys [tweet _id]}]
-                 (let [{aid :article} (mc/find-one-as-map @db "origins" {:tweet tweet})
-                       {source-tweet :tweet} (mc/find-one-as-map @db "origins" {:article aid :source {$ne nil}})]
-                   (if source-tweet
-                     1
-                     0)))
-               (mc/find-maps @db "published" {:type :share}))))
+     (doall
+      (pmap
+       (fn [{:keys [tweet _id]}]
+         (let [{aid :article} (mc/find-one-as-map @db "origins" {:tweet tweet})
+               {source-tweet :tweet} (mc/find-one-as-map @db "origins" {:article aid :source {$ne nil}})]
+           (if source-tweet
+             (store-reaction _id source-tweet)
+             nil)))
+       (mc/find-maps @db "publications" {:type :share})))
      (say/say "Computation completed")))
 
 
+  ;; store mentions
   (time
    (doall
     (pmap
@@ -518,7 +516,17 @@
                 (store-mention uid _id)
                 nil)))
           user_mentions)))
-     (mc/find-maps @db "published"))))
+     (mc/find-maps @db "publications"))))
+
+
+  (->> (mc/find-maps @db "publications")
+       (map :hashtags)
+       flatten
+       (into #{})
+       second
+       (mc/find-map-by-id @db "hashtags")
+       aprint)
+
 
 
 
