@@ -10,16 +10,17 @@
   (:require [gorilla-plot.core :refer :all]
             [ceres.collector :refer :all]
             [ceres.curator :refer [random-tree build-tree-from-source compute-summary]]
+            [ceres.analyzer :refer [reaction-tree summary hashtags-of-the-day]]
             [monger.collection :as mc]
+            [clojure.walk :as walk]
+            [clojure.zip :as zip]
             [clj-time.core :as t]
             [clj-time.periodic :as p]
+            [incanter.stats :refer [mean median quantile variance]]
             [monger.operators :refer :all]
             [monger.query :refer :all])
   (:import org.bson.types.ObjectId))
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
-;; <=
 
 ;; **
 ;;; Follwing news distributors are watched
@@ -373,7 +374,7 @@ news-accounts
 
 ;; @@
 (def source-tweet-counts (->> (mc/find-maps @db "users" {:screen_name {$in news-accounts}})
-     			    	 (pmap (fn [{:keys [screen_name _id]}] [screen_name (mc/count @db "published" {:user _id})]))
+     			    	 (pmap (fn [{:keys [screen_name _id]}] [screen_name (mc/count @db "publications" {:user _id})]))
                          (into {})))
 ;; @@
 ;; =>
@@ -397,14 +398,114 @@ news-accounts
   (bar-chart (keys source-url-counts) (vals source-url-counts)))
 ;; @@
 ;; =>
-;;; {"type":"vega","content":{"width":1000,"height":618.0469970703125,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"ordinal","range":"width","domain":{"data":"cdab57da-9f48-45e3-b073-985d18645933","field":"data.x"}},{"name":"y","range":"height","nice":true,"domain":{"data":"cdab57da-9f48-45e3-b073-985d18645933","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"cdab57da-9f48-45e3-b073-985d18645933","values":[{"x":"dpa","y":520},{"x":"tazgezwitscher","y":700},{"x":"BILD","y":1327},{"x":"ZDFheute","y":949},{"x":"FAZ_NET","y":2919},{"x":"focusonline","y":271},{"x":"welt","y":1990},{"x":"N24_de","y":1962},{"x":"DerWesten","y":947},{"x":"SPIEGELONLINE","y":1763},{"x":"ntvde","y":1816},{"x":"tagesschau","y":1736},{"x":"SZ","y":1615},{"x":"sternde","y":982}]},{"name":"e0e1d1d2-4b30-4339-b9f3-d04295f8898f","values":[{"x":"dpa","y":445},{"x":"tazgezwitscher","y":639},{"x":"BILD","y":983},{"x":"ZDFheute","y":530},{"x":"FAZ_NET","y":2187},{"x":"focusonline","y":266},{"x":"welt","y":1798},{"x":"N24_de","y":1940},{"x":"DerWesten","y":854},{"x":"SPIEGELONLINE","y":1642},{"x":"ntvde","y":1793},{"x":"tagesschau","y":1282},{"x":"SZ","y":1523},{"x":"sternde","y":895}]}],"marks":[{"type":"rect","from":{"data":"cdab57da-9f48-45e3-b073-985d18645933"},"properties":{"enter":{"y":{"scale":"y","field":"data.y"},"width":{"offset":-1,"scale":"x","band":true},"x":{"scale":"x","field":"data.x"},"y2":{"scale":"y","value":0}},"update":{"fill":{"value":"red"},"opacity":{"value":1}},"hover":{"fill":{"value":"#FF29D2"}}}},{"type":"rect","from":{"data":"e0e1d1d2-4b30-4339-b9f3-d04295f8898f"},"properties":{"enter":{"y":{"scale":"y","field":"data.y"},"width":{"offset":-1,"scale":"x","band":true},"x":{"scale":"x","field":"data.x"},"y2":{"scale":"y","value":0}},"update":{"fill":{"value":"steelblue"},"opacity":{"value":1}},"hover":{"fill":{"value":"#FF29D2"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 1000, :height 618.047, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"ordinal\", :range \"width\", :domain {:data \"cdab57da-9f48-45e3-b073-985d18645933\", :field \"data.x\"}} {:name \"y\", :range \"height\", :nice true, :domain {:data \"cdab57da-9f48-45e3-b073-985d18645933\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"cdab57da-9f48-45e3-b073-985d18645933\", :values ({:x \"dpa\", :y 520} {:x \"tazgezwitscher\", :y 700} {:x \"BILD\", :y 1327} {:x \"ZDFheute\", :y 949} {:x \"FAZ_NET\", :y 2919} {:x \"focusonline\", :y 271} {:x \"welt\", :y 1990} {:x \"N24_de\", :y 1962} {:x \"DerWesten\", :y 947} {:x \"SPIEGELONLINE\", :y 1763} {:x \"ntvde\", :y 1816} {:x \"tagesschau\", :y 1736} {:x \"SZ\", :y 1615} {:x \"sternde\", :y 982})} {:name \"e0e1d1d2-4b30-4339-b9f3-d04295f8898f\", :values ({:x \"dpa\", :y 445} {:x \"tazgezwitscher\", :y 639} {:x \"BILD\", :y 983} {:x \"ZDFheute\", :y 530} {:x \"FAZ_NET\", :y 2187} {:x \"focusonline\", :y 266} {:x \"welt\", :y 1798} {:x \"N24_de\", :y 1940} {:x \"DerWesten\", :y 854} {:x \"SPIEGELONLINE\", :y 1642} {:x \"ntvde\", :y 1793} {:x \"tagesschau\", :y 1282} {:x \"SZ\", :y 1523} {:x \"sternde\", :y 895})}), :marks ({:type \"rect\", :from {:data \"cdab57da-9f48-45e3-b073-985d18645933\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"red\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}} {:type \"rect\", :from {:data \"e0e1d1d2-4b30-4339-b9f3-d04295f8898f\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"steelblue\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}})}}"}
+;;; {"type":"vega","content":{"width":1000,"height":618.0469970703125,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"ordinal","range":"width","domain":{"data":"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f","field":"data.x"}},{"name":"y","range":"height","nice":true,"domain":{"data":"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f","values":[{"x":"dpa","y":520},{"x":"tazgezwitscher","y":700},{"x":"BILD","y":1327},{"x":"ZDFheute","y":949},{"x":"FAZ_NET","y":2919},{"x":"focusonline","y":271},{"x":"welt","y":1990},{"x":"N24_de","y":1962},{"x":"DerWesten","y":947},{"x":"SPIEGELONLINE","y":1763},{"x":"ntvde","y":1816},{"x":"tagesschau","y":1736},{"x":"SZ","y":1615},{"x":"sternde","y":982}]},{"name":"f42733d3-7271-4aa2-a87e-c3412e9b856c","values":[{"x":"dpa","y":445},{"x":"tazgezwitscher","y":639},{"x":"BILD","y":983},{"x":"ZDFheute","y":530},{"x":"FAZ_NET","y":2187},{"x":"focusonline","y":266},{"x":"welt","y":1798},{"x":"N24_de","y":1940},{"x":"DerWesten","y":854},{"x":"SPIEGELONLINE","y":1642},{"x":"ntvde","y":1793},{"x":"tagesschau","y":1282},{"x":"SZ","y":1523},{"x":"sternde","y":895}]}],"marks":[{"type":"rect","from":{"data":"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f"},"properties":{"enter":{"y":{"scale":"y","field":"data.y"},"width":{"offset":-1,"scale":"x","band":true},"x":{"scale":"x","field":"data.x"},"y2":{"scale":"y","value":0}},"update":{"fill":{"value":"red"},"opacity":{"value":1}},"hover":{"fill":{"value":"#FF29D2"}}}},{"type":"rect","from":{"data":"f42733d3-7271-4aa2-a87e-c3412e9b856c"},"properties":{"enter":{"y":{"scale":"y","field":"data.y"},"width":{"offset":-1,"scale":"x","band":true},"x":{"scale":"x","field":"data.x"},"y2":{"scale":"y","value":0}},"update":{"fill":{"value":"steelblue"},"opacity":{"value":1}},"hover":{"fill":{"value":"#FF29D2"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 1000, :height 618.047, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"ordinal\", :range \"width\", :domain {:data \"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f\", :field \"data.x\"}} {:name \"y\", :range \"height\", :nice true, :domain {:data \"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f\", :values ({:x \"dpa\", :y 520} {:x \"tazgezwitscher\", :y 700} {:x \"BILD\", :y 1327} {:x \"ZDFheute\", :y 949} {:x \"FAZ_NET\", :y 2919} {:x \"focusonline\", :y 271} {:x \"welt\", :y 1990} {:x \"N24_de\", :y 1962} {:x \"DerWesten\", :y 947} {:x \"SPIEGELONLINE\", :y 1763} {:x \"ntvde\", :y 1816} {:x \"tagesschau\", :y 1736} {:x \"SZ\", :y 1615} {:x \"sternde\", :y 982})} {:name \"f42733d3-7271-4aa2-a87e-c3412e9b856c\", :values ({:x \"dpa\", :y 445} {:x \"tazgezwitscher\", :y 639} {:x \"BILD\", :y 983} {:x \"ZDFheute\", :y 530} {:x \"FAZ_NET\", :y 2187} {:x \"focusonline\", :y 266} {:x \"welt\", :y 1798} {:x \"N24_de\", :y 1940} {:x \"DerWesten\", :y 854} {:x \"SPIEGELONLINE\", :y 1642} {:x \"ntvde\", :y 1793} {:x \"tagesschau\", :y 1282} {:x \"SZ\", :y 1523} {:x \"sternde\", :y 895})}), :marks ({:type \"rect\", :from {:data \"5a7033d4-82fe-4d01-a6ff-6b4f30745d2f\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"red\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}} {:type \"rect\", :from {:data \"f42733d3-7271-4aa2-a87e-c3412e9b856c\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"steelblue\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}})}}"}
+;; <=
+
+;; **
+;;; # Overall Statistics
+;; **
+
+;; **
+;;; ## Tree Size
+;; **
+
+;; @@
+(def short-summary 
+  (let [users (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
+        reaction-forest (pmap #(reaction-tree (:_id %)) (mc/find-maps @db "publications" {:user {$in users}}))]
+         (pmap summary reaction-forest)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/short-summary</span>","value":"#'unsightly-reserve/short-summary"}
 ;; <=
 
 ;; @@
-
+(defn short-metrics [coll]
+  {:mean (mean coll)
+   :variance (variance coll)
+   :quantiles (quantile coll)})
 ;; @@
 ;; =>
-;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;dpa&quot;</span>","value":"\"dpa\""},{"type":"html","content":"<span class='clj-long'>75</span>","value":"75"}],"value":"[\"dpa\" 75]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;tazgezwitscher&quot;</span>","value":"\"tazgezwitscher\""},{"type":"html","content":"<span class='clj-long'>61</span>","value":"61"}],"value":"[\"tazgezwitscher\" 61]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;BILD&quot;</span>","value":"\"BILD\""},{"type":"html","content":"<span class='clj-long'>344</span>","value":"344"}],"value":"[\"BILD\" 344]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;ZDFheute&quot;</span>","value":"\"ZDFheute\""},{"type":"html","content":"<span class='clj-long'>419</span>","value":"419"}],"value":"[\"ZDFheute\" 419]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;FAZ_NET&quot;</span>","value":"\"FAZ_NET\""},{"type":"html","content":"<span class='clj-long'>732</span>","value":"732"}],"value":"[\"FAZ_NET\" 732]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;focusonline&quot;</span>","value":"\"focusonline\""},{"type":"html","content":"<span class='clj-long'>5</span>","value":"5"}],"value":"[\"focusonline\" 5]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;welt&quot;</span>","value":"\"welt\""},{"type":"html","content":"<span class='clj-long'>192</span>","value":"192"}],"value":"[\"welt\" 192]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;N24_de&quot;</span>","value":"\"N24_de\""},{"type":"html","content":"<span class='clj-long'>22</span>","value":"22"}],"value":"[\"N24_de\" 22]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;DerWesten&quot;</span>","value":"\"DerWesten\""},{"type":"html","content":"<span class='clj-long'>93</span>","value":"93"}],"value":"[\"DerWesten\" 93]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;SPIEGELONLINE&quot;</span>","value":"\"SPIEGELONLINE\""},{"type":"html","content":"<span class='clj-long'>121</span>","value":"121"}],"value":"[\"SPIEGELONLINE\" 121]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;ntvde&quot;</span>","value":"\"ntvde\""},{"type":"html","content":"<span class='clj-long'>23</span>","value":"23"}],"value":"[\"ntvde\" 23]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;tagesschau&quot;</span>","value":"\"tagesschau\""},{"type":"html","content":"<span class='clj-long'>454</span>","value":"454"}],"value":"[\"tagesschau\" 454]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;SZ&quot;</span>","value":"\"SZ\""},{"type":"html","content":"<span class='clj-long'>92</span>","value":"92"}],"value":"[\"SZ\" 92]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;sternde&quot;</span>","value":"\"sternde\""},{"type":"html","content":"<span class='clj-long'>87</span>","value":"87"}],"value":"[\"sternde\" 87]"}],"value":"{\"dpa\" 75, \"tazgezwitscher\" 61, \"BILD\" 344, \"ZDFheute\" 419, \"FAZ_NET\" 732, \"focusonline\" 5, \"welt\" 192, \"N24_de\" 22, \"DerWesten\" 93, \"SPIEGELONLINE\" 121, \"ntvde\" 23, \"tagesschau\" 454, \"SZ\" 92, \"sternde\" 87}"}
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/short-metrics</span>","value":"#'unsightly-reserve/short-metrics"}
+;; <=
+
+;; @@
+(short-metrics (map :size short-summary))
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>6.257219059342463</span>","value":"6.257219059342463"}],"value":"[:mean 6.257219059342463]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>86.42137086670392</span>","value":"86.42137086670392"}],"value":"[:variance 86.42137086670392]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 3.0 8.0 207.0)</span>","value":"(1.0 1.0 3.0 8.0 207.0)"}],"value":"[:quantiles (1.0 1.0 3.0 8.0 207.0)]"}],"value":"{:mean 6.257219059342463, :variance 86.42137086670392, :quantiles (1.0 1.0 3.0 8.0 207.0)}"}
+;; <=
+
+;; @@
+(short-metrics (map :height short-summary))
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>0.9200389803559522</span>","value":"0.9200389803559522"}],"value":"[:mean 0.9200389803559522]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>1.499094212678211</span>","value":"1.499094212678211"}],"value":"[:variance 1.499094212678211]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(0.0 0.0 1.0 1.0 48.0)</span>","value":"(0.0 0.0 1.0 1.0 48.0)"}],"value":"[:quantiles (0.0 0.0 1.0 1.0 48.0)]"}],"value":"{:mean 0.9200389803559522, :variance 1.499094212678211, :quantiles (0.0 0.0 1.0 1.0 48.0)}"}
+;; <=
+
+;; **
+;;; ## User Posts
+;; **
+
+;; @@
+(def user-post-frequencies
+  (->> (mc/find-maps @db "publications")
+       (map :user)
+       frequencies))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/user-post-frequencies</span>","value":"#'unsightly-reserve/user-post-frequencies"}
+;; <=
+
+;; @@
+(short-metrics (vals user-post-frequencies))
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>4.354942375886525</span>","value":"4.354942375886525"}],"value":"[:mean 4.354942375886525]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>915.8972380673573</span>","value":"915.8972380673573"}],"value":"[:variance 915.8972380673573]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 1.0 2.0 2919.0)</span>","value":"(1.0 1.0 1.0 2.0 2919.0)"}],"value":"[:quantiles (1.0 1.0 1.0 2.0 2919.0)]"}],"value":"{:mean 4.354942375886525, :variance 915.8972380673573, :quantiles (1.0 1.0 1.0 2.0 2919.0)}"}
+;; <=
+
+;; **
+;;; ## User Mentions
+;; **
+
+;; @@
+(def user-mention-frequencies
+  (->> (mc/find-maps @db "mentions")
+       (map :user)
+       frequencies))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/user-mention-frequencies</span>","value":"#'unsightly-reserve/user-mention-frequencies"}
+;; <=
+
+;; @@
+(short-metrics (vals user-mention-frequencies))
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>35.81539447190188</span>","value":"35.81539447190188"}],"value":"[:mean 35.81539447190188]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>705749.0909520709</span>","value":"705749.0909520709"}],"value":"[:variance 705749.0909520709]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 2.0 6.0 52035.0)</span>","value":"(1.0 1.0 2.0 6.0 52035.0)"}],"value":"[:quantiles (1.0 1.0 2.0 6.0 52035.0)]"}],"value":"{:mean 35.81539447190188, :variance 705749.0909520709, :quantiles (1.0 1.0 2.0 6.0 52035.0)}"}
+;; <=
+
+;; **
+;;; ## Hashtags
+;; **
+
+;; @@
+(def hashtag-frequencies
+  (->> (mc/find-maps @db "publications")
+       (map :hashtags)
+       (remove nil?)
+       flatten
+       frequencies))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/hashtag-frequencies</span>","value":"#'unsightly-reserve/hashtag-frequencies"}
+;; <=
+
+;; @@
+(short-metrics (vals hashtag-frequencies))
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>10.725150555659031</span>","value":"10.725150555659031"}],"value":"[:mean 10.725150555659031]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>10728.604261859029</span>","value":"10728.604261859029"}],"value":"[:variance 10728.604261859029]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 2.0 4.0 6491.0)</span>","value":"(1.0 1.0 2.0 4.0 6491.0)"}],"value":"[:quantiles (1.0 1.0 2.0 4.0 6491.0)]"}],"value":"{:mean 10.725150555659031, :variance 10728.604261859029, :quantiles (1.0 1.0 2.0 4.0 6491.0)}"}
 ;; <=
 
 ;; @@
