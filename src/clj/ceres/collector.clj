@@ -45,6 +45,7 @@
     (mc/ensure-index @db "origins" (array-map :ts 1))
     (mc/ensure-index @db "origins" (array-map :source 1))
     (mc/ensure-index @db "origins" (array-map :tweet 1))
+    (mc/ensure-index @db "origins" (array-map :article 1 :source 1))
     (mc/ensure-index @db "publications" (array-map :tweet 1))
     (mc/ensure-index @db "publications" (array-map :user 1))
     (mc/ensure-index @db "publications" (array-map :ts 1))
@@ -505,29 +506,21 @@
 
   ;; store mentions
   (time
-   (doall
-    (pmap
-     (fn [{:keys [_id tweet]}]
-       (let [{{:keys [user_mentions]} :entities} (mc/find-map-by-id @db "tweets" tweet)]
-         (pmap
-          (fn [{:keys [id]}]
-            (let [uid (:_id (mc/find-one-as-map @db "users" {:id id}))]
-              (if uid
-                (store-mention uid _id)
-                nil)))
-          user_mentions)))
-     (mc/find-maps @db "publications"))))
-
-
-  (->> (mc/find-maps @db "publications")
-       (map :hashtags)
-       flatten
-       (into #{})
-       second
-       (mc/find-map-by-id @db "hashtags")
-       aprint)
-
-
+   (do
+     (say/say "Computation started")
+     (doall
+      (pmap
+       (fn [{:keys [_id tweet]}]
+         (let [{{:keys [user_mentions]} :entities} (mc/find-map-by-id @db "tweets" tweet)]
+           (pmap
+            (fn [{:keys [id]}]
+              (let [uid (:_id (mc/find-one-as-map @db "users" {:id id}))]
+                (if uid
+                  (store-mention uid _id)
+                  nil)))
+            user_mentions)))
+       (mc/find-maps @db "publications")))
+     (say/say "Computation completed")))
 
 
 )
