@@ -230,7 +230,7 @@
 
 
 (defn store-hashtag [text]
-  (mc/insert
+  (mc/insert-and-return
    @db
    "hashtags"
    {:text text}))
@@ -241,6 +241,48 @@
   [pub-id source-id]
   (mc/insert @db "reactions" {:publication pub-id :source source-id}))
 
+
+(defn get-user-id [{:keys [user] :as status}]
+  (if-let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))]
+    uid
+    (:_id (store-user status))))
+
+(defn get-hashtag-id [text]
+  (if-let [hid (:_id (mc/find-one-as-map @db "hashtags" {:text text}))]
+    hid
+    (:_id (store-hashtag text))))
+
+(defn get-url-id
+  "Get url id if exists otherwise store url"
+  [url]
+  (if-let [url-id (:_id (mc/find-one-as-map @db "urls" {:url url}))]
+    url-id
+    (if-let [expanded-url (:url (expand-url url))]
+      (if-let [x-url-id (:_id (mc/find-one-as-map @db "urls" {:url expanded-url}))]
+        x-url-id
+        (:_id (store-url expanded-url)))
+      nil)))
+
+
+(defn get-type [{:keys [in_reply_to_status_id retweeted_status entities]}]
+  (if in_reply_to_status_id
+    :reply
+    (if retweeted_status
+      :retweet
+      (if-not (empty? (:urls entities))
+        :source-or-share
+        :unrelated))))
+
+
+(defn store-raw-tweet [status]
+  (let [oid (ObjectId.)
+        doc (update-in status [:created_at] (fn [x] (f/parse custom-formatter x)))
+        {:keys [user entities retweeted_status in_reply_to_status_id created_at]
+         :as record} (from-db-object (mc/insert-and-return @db "tweets" (merge doc {:_id oid})) true)
+        uid (get-user-id status)
+        hids (map (fn [{:keys [text]}] (get-hashtag-id text)) (:hashtags entities))
+        type (get-type status)]
+    ))
 
 
 (comment
@@ -374,7 +416,7 @@
               (if retweeted_status
                 :retweet
                 (if-not (empty? (:urls entities))
-                  :source
+                  :source-or-share
                   :unrelated))))
           (transact-publications [{:keys [user _id entities created_at] :as tweet}]
             (let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))
