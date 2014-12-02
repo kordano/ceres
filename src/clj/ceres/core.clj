@@ -7,7 +7,7 @@
             [compojure.core :refer [GET POST defroutes]]
             [org.httpkit.server :refer [with-channel on-close on-receive run-server send!]]
             [net.cgrand.enlive-html :refer [deftemplate set-attr append html substitute content]]
-            [ceres.collector :refer [store set-db] :as collector]
+            [ceres.collector :refer [store store-raw-tweet set-db] :as collector]
             [ceres.curator :refer [get-articles-count] :as curator]
             [ceres.executor :refer [start-executor]]
             [gezwitscher.core :refer [start-filter-stream gezwitscher]]
@@ -97,6 +97,11 @@
     (swap! state update-in [:app :recent-tweets] (fn [old new] (vec (take 100 (into [new] old)))) tweet)))
 
 
+(defn stream-handler-beta
+  [state tweet]
+  (let [{:keys [text user]} (store-raw-tweet tweet)]))
+
+
 (defn initialize
   "Initialize the server state using a given config file"
   [state path]
@@ -117,7 +122,7 @@
     (let [output (<!! out)]
       (go-loop [status (<! (:status-ch output))]
         (when status
-          (stream-handler state status)
+          (stream-handler-beta state status)
           (recur (<! (:status-ch output))))))
     [in out]))
 
@@ -152,8 +157,9 @@
 
   (initialize server-state "opt/server-config-1.edn")
 
-  (let [{{:keys [follow track credentials]} :app} @server-state]
-    (start-filter-stream follow track (partial stream-handler server-state) credentials))
+  (def stop-stream
+    (let [{{:keys [follow track credentials]} :app} @server-state]
+      (start-filter-stream follow track store-raw-tweet credentials)))
 
   (stop-stream)
 

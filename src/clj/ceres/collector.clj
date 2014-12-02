@@ -21,7 +21,7 @@
 (def db (atom
          (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
                ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
-           (mg/get-db (mg/connect sa opts) "athena"))))
+           (mg/get-db (mg/connect sa opts) "apollon"))))
 
 
 (def time-interval {$gt (t/date-time 2014 8 1) $lt (t/date-time 2014 9 1)})
@@ -188,7 +188,7 @@
     :date date}))
 
 
-(defn store-publications [uid tid url-id type hids ts]
+(defn store-publication [uid tid url-id type hids ts]
   (mc/insert-and-return
    @db
    "publications"
@@ -254,13 +254,13 @@
 
 (defn get-url-id
   "Get url id if exists otherwise store url"
-  [url]
+  [url uid tid ts]
   (if-let [url-id (:_id (mc/find-one-as-map @db "urls" {:url url}))]
     url-id
     (if-let [expanded-url (:url (expand-url url))]
       (if-let [x-url-id (:_id (mc/find-one-as-map @db "urls" {:url expanded-url}))]
         x-url-id
-        (:_id (store-url expanded-url)))
+        (:_id (store-url expanded-url uid tid ts)))
       nil)))
 
 
@@ -274,15 +274,36 @@
         :unrelated))))
 
 
+(defn store-simple-reaction
+  "Store tweet as publication and reaction"
+  [uid tid type hids ts source-id]
+  (let [source-tid (:_id (mc/find-one-as-map @db "tweets" {:id source-id}))
+        source-pub-id (if source-tid
+                        (:_id (mc/find-one-as-map @db "publications" {:tweet source-tid}))
+                        nil)
+        pub-id (:_id (do (store-publication uid tid nil type hids ts)))]
+    (when source-pub-id
+      (store-reaction pub-id source-pub-id))))
+
 (defn store-raw-tweet [status]
   (let [oid (ObjectId.)
         doc (update-in status [:created_at] (fn [x] (f/parse custom-formatter x)))
-        {:keys [user entities retweeted_status in_reply_to_status_id created_at]
+        {:keys [user entities retweeted_status in_reply_to_status_id created_at _id]
          :as record} (from-db-object (mc/insert-and-return @db "tweets" (merge doc {:_id oid})) true)
         uid (get-user-id status)
-        hids (map (fn [{:keys [text]}] (get-hashtag-id text)) (:hashtags entities))
+        hids (doall (map (fn [{:keys [text]}] (get-hashtag-id text)) (:hashtags entities)))
         type (get-type status)]
-    ))
+    (case type
+      :retweet (do (store-simple-reaction uid _id :retweet hids created_at (:id retweeted_status)))
+      :reply (do (store-simple-reaction uid _id :reply hids created_at in_reply_to_status_id))
+      :source-or-share (let [url-ids (doall (map #(get-url-id (:expanded_url %) uid _id created_at) (:urls entities)))]
+                         (if (news-accounts (:screen_name user))
+                           (store-publication uid _id (first url-ids) :source hids created_at)
+                           (let [source-pub-id (or (doall (map #(:_id (mc/find-one-as-map @db "publications" {:url %})) url-ids)))
+                                 pub-id (:_id (store-publication uid _id nil :share hids created_at))]
+                             (when source-pub-id
+                               (store-reaction pub-id source-pub-id)))))
+      :unrelated (store-publication uid _id nil :unrelated hids created_at))))
 
 
 (comment
@@ -371,7 +392,7 @@
              (take 10)
              (pmap get-url-id)
              #_(pmap #(let [url-id (get-url-id %)]
-                        (store-publications (get-uid %)
+                        (store-publication (get-uid %)
                                          (:_id %)
                                          url-id
                                          (get-type % url-id)
@@ -430,7 +451,7 @@
                               vec)
                          nil)
                   t-type (dispatch-type tweet)]
-              (store-publications uid _id url-id t-type hids created_at)))]
+              (store-publication uid _id url-id t-type hids created_at)))]
     (let [tweets (mc/find-maps @db "tweets"
                                {:created_at {$gt (t/date-time 2014 8 1)
                                              $lt (t/date-time 2014 9 1)}
@@ -448,7 +469,7 @@
                               (into #{})
                               vec)
                          nil)]
-              (store-publications uid _id nil :retweet hids created_at)))]
+              (store-publication uid _id nil :retweet hids created_at)))]
     (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
                                                             $lt (t/date-time 2014 9 1)}
                                                :retweeted_status {$ne nil}
@@ -466,7 +487,7 @@
                               (into #{})
                               vec)
                          nil)]
-              (store-publications uid _id nil :reply hids created_at)))]
+              (store-publication uid _id nil :reply hids created_at)))]
     (let [retweets (mc/find-maps @db "tweets" {:created_at {$gt (t/date-time 2014 8 1)
                                                             $lt (t/date-time 2014 9 1)}
                                                :in_reply_to_status_id_str {$ne nil}
@@ -484,7 +505,7 @@
                               (into #{})
                               vec)
                          nil)]
-              (store-publications uid _id nil :share hids created_at)))]
+              (store-publication uid _id nil :share hids created_at)))]
     (time
      (doall
       (->> (mc/find-maps @db "origins" {:source nil
@@ -498,6 +519,7 @@
                      tweet)))
            (remove #{:no-share})
            (pmap transact-publications)))))
+
 
 
   ;; retweet reactions
