@@ -303,7 +303,8 @@
                                  pub-id (:_id (store-publication uid _id nil :share hids created_at))]
                              (when source-pub-id
                                (store-reaction pub-id source-pub-id)))))
-      :unrelated (store-publication uid _id nil :unrelated hids created_at))))
+      :unrelated (store-publication uid _id nil :unrelated hids created_at))
+    record))
 
 
 (comment

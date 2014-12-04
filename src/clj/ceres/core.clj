@@ -155,11 +155,14 @@
 
 (comment
 
-  (initialize server-state "opt/server-config-1.edn")
+  (initialize server-state "opt/test-config.edn")
 
   (def stop-stream
     (let [{{:keys [follow track credentials]} :app} @server-state]
-      (start-filter-stream follow track store-raw-tweet credentials)))
+      (start-filter-stream follow track (fn [s]
+                                          (let [{:keys [text user]} (store-raw-tweet s)]
+                                            (debug (str "@" (:screen_name user) ": " text))))
+                           credentials)))
 
   (stop-stream)
 
