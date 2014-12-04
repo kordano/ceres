@@ -21,7 +21,7 @@
 (def db (atom
          (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
                ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
-           (mg/get-db (mg/connect sa opts) "apollon"))))
+           (mg/get-db (mg/connect sa opts) "athena"))))
 
 
 (def time-interval {$gt (t/date-time 2014 8 1) $lt (t/date-time 2014 9 1)})
@@ -284,6 +284,7 @@
         pub-id (:_id (do (store-publication uid tid nil type hids ts)))]
     (when source-pub-id
       (store-reaction pub-id source-pub-id))))
+
 
 (defn store-raw-tweet [status]
   (let [oid (ObjectId.)
@@ -585,6 +586,5 @@
             user_mentions)))
        (mc/find-maps @db "publications")))
      (say/say "Computation completed")))
-
 
 )
