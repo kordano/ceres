@@ -65,10 +65,25 @@
          (take 10)
          keys)))
 
+(defn users-of-the-day
+  "Get user with most posts of given date"
+  [date]
+  (let [pubs (mc/find-maps @db "publications" {:ts {$gt date
+                                                    $lt (t/plus date (t/days 1))}})]
+    (->> pubs
+         (map :user)
+         frequencies
+         (sort-by second >)
+         (take 10)
+         (map (fn [[k v]] [(:screen_name (mc/find-map-by-id @db "users" k))
+                          (float (/ v (count pubs)))])))))
+
 
 (comment
 
-  (hashtags-of-the-day (t/date-time 2014 8 1))
+  (aprint (users-of-the-day (t/date-time 2014 8 1)))
+
+
 
 
   )
