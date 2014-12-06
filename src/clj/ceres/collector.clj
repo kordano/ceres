@@ -16,7 +16,9 @@
             [clj-time.core :as t])
   (:import org.bson.types.ObjectId))
 
+
 (timbre/refer-timbre)
+
 
 (def db (atom
          (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
@@ -26,6 +28,7 @@
 
 (def time-interval {$gt (t/date-time 2014 8 1) $lt (t/date-time 2014 9 1)})
 
+
 (defn set-db [name]
   (let [^MongoOptions opts (mg/mongo-options :threads-allowed-to-block-for-connection-multiplier 300)
         ^ServerAddress sa  (mg/server-address (or (System/getenv "DB_PORT_27017_TCP_ADDR") "127.0.0.1") 27017)]
@@ -33,6 +36,7 @@
 
 
 (def custom-formatter (f/formatter "E MMM dd HH:mm:ss Z YYYY"))
+
 
 (def news-accounts #{"FAZ_NET" "dpa" "tagesschau" "SPIEGELONLINE" "SZ" "BILD" "DerWesten" "ntvde" "tazgezwitscher" "welt" "ZDFheute" "N24_de" "sternde" "focusonline"} )
 
@@ -73,10 +77,9 @@
   "Expands shortened url strings, thanks to http://www.philippeadjiman.com/blog/2009/09/07/the-trick-to-write-a-fast-universal-java-url-expander/"
   [url-str]
   (let [url (java.net.URL. url-str)
-        conn (try
-               (.openConnection url)
-               (catch Exception e (do (error (str e))
-                                      false)))]
+        conn (try (.openConnection url)
+                  (catch Exception e (do (error (str e))
+                                         false)))]
     (if conn
       (do (.setInstanceFollowRedirects conn false)
           (try
@@ -106,6 +109,7 @@
     :article article
     :source source
     :ts ts}))
+
 
 (defn fetch-url [url]
   (try
@@ -176,7 +180,6 @@
         articles)))))
 
 
-
 (defn store-user [{{:keys [id screen_name followers_count created_at]} :user}]
   (let [date (f/parse custom-formatter created_at)]
       (mc/insert-and-return
@@ -185,6 +188,7 @@
        {:id id
         :screen_name screen_name
         :created_at date})))
+
 
 (defn store-followers-count [uid followers-count date]
   (mc/insert
@@ -215,6 +219,7 @@
     :user uid
     :tweet tid
     :ts ts}))
+
 
 (defn store-tmp-url [url uid tid ts]
   (mc/insert
@@ -251,6 +256,7 @@
   (if-let [uid (:_id (mc/find-one-as-map @db "users" {:id (:id user)}))]
     uid
     (:_id (store-user status))))
+
 
 (defn get-hashtag-id [text]
   (if-let [hid (:_id (mc/find-one-as-map @db "hashtags" {:text text}))]

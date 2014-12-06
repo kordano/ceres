@@ -30,8 +30,6 @@
             (store-user tweet)))))))
 
 
-
-
   ;; export urls
   (time
    (do
@@ -110,7 +108,6 @@
                                          (:created_at %)))))))))
 
 
-
   ;; export tmp urls
   (letfn [(x-url [url]
             (let [expanded-url (-> url :url expand-url :url)]
@@ -141,6 +138,7 @@
              (into #{})
              (pmap store-hashtag))))))
 
+
   ;; export news publications
   (letfn [(dispatch-type [{:keys [in_reply_to_status_id retweeted_status entities]}]
             (if in_reply_to_status_id
@@ -170,6 +168,7 @@
       (time
        (doall
         (pmap transact-publications tweets)))))
+
 
   ;; export retweets
   (letfn [(transact-publications [{:keys [user _id created_at entities id_str retweeted_status] :as tweet}]
@@ -204,7 +203,6 @@
                                                :in_reply_to_status_id_str {$ne nil}
                                                :user.screen_name {$nin news-accounts}})]
       (time (doall (pmap transact-publications retweets)))))
-
 
 
   ;; export shares
@@ -296,6 +294,5 @@
             user_mentions)))
        (mc/find-maps @db "publications")))
      (say/say "Computation completed")))
-
 
 )
