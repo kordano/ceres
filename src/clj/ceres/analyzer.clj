@@ -62,26 +62,56 @@
          (pmap :text)
          frequencies
          (sort-by second >)
-         (take 10)
-         keys)))
+         (take 25))))
 
 (defn users-of-the-day
   "Get user with most posts of given date"
   [date]
   (let [pubs (mc/find-maps @db "publications" {:ts {$gt date
                                                     $lt (t/plus date (t/days 1))}})]
-    (->> pubs
-         (map :user)
-         frequencies
-         (sort-by second >)
-         (take 10)
-         (map (fn [[k v]] [(:screen_name (mc/find-map-by-id @db "users" k))
-                          (float (/ v (count pubs)))])))))
+    [(count pubs)
+     (->> pubs
+          (map :user)
+          frequencies
+          (sort-by second >)
+          (take 25)
+          (map (fn [[k v]] [(:screen_name (mc/find-map-by-id @db "users" k))
+                           v])))]))
 
 
 (comment
 
-  (aprint (users-of-the-day (t/date-time 2014 8 1)))
+
+  (let [user-freq (->> (mc/find-maps @db "publications")
+                       (map :user)
+                       frequencies)]
+    (->> user-freq
+         (remove (fn [[k v]] (> v 1)))
+         keys
+         (map #(mc/find-one-as-map @db "publications" {:user %}))
+         (map :hashtags)
+         flatten
+         (remove nil?)
+         frequencies
+         (sort-by second >)
+         (take 25)
+         (map (fn [[k v]] [(:text (mc/find-map-by-id @db "hashtags" k))
+                          v]))
+         aprint
+         time))
+
+
+  (->> (mc/find-maps @db "publications")
+       (map :hashtags)
+       (remove nil?)
+       flatten
+       frequencies
+       (sort-by second >)
+       (take 25)
+       (map (fn [[k v]] [(:text (mc/find-map-by-id @db "hashtags" k))
+                        v]))
+       aprint
+       time)
 
 
 
