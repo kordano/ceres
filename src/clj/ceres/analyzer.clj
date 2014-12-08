@@ -38,12 +38,30 @@
    (find-reactions pub)))
 
 
+(defn find-full-reactions
+  "extended reaction tree recursion"
+  [pid]
+  (let [publication (mc/find-map-by-id @db "publications" pid)
+        reactions (mc/find-maps @db "reactions" {:source pid})]
+    (Publication. publication (vec (pmap #(find-full-reactions (:publication %)) reactions)))))
+
+
+(defn full-reaction-tree [pub]
+  (zip/zipper
+   (fn [node] true)
+   (fn [node] (:reactions node))
+   (fn [node new-children] (assoc-in node [:reactions] new-children))
+   (find-reactions pub)))
+
+
 (defn summary [tree]
   (loop [size 0
          max-path 0
+         delays []
          loc tree]
     (if (zip/end? loc)
       {:size size
+       :delays delays
        :height max-path}
       (recur
        (if (zip/node loc) (inc size) size)
@@ -64,6 +82,7 @@
          (sort-by second >)
          (take 25))))
 
+
 (defn users-of-the-day
   "Get user with most posts of given date"
   [date]
@@ -82,6 +101,7 @@
 (comment
 
 
+  ;; hashtag distribution of one-time-posters
   (let [user-freq (->> (mc/find-maps @db "publications")
                        (map :user)
                        frequencies)]
@@ -101,6 +121,7 @@
          time))
 
 
+  ;; hashtag distribution
   (->> (mc/find-maps @db "publications")
        (map :hashtags)
        (remove nil?)
@@ -114,6 +135,17 @@
        time)
 
 
+  (let [users (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))]
+    (->> (mc/find-maps @db "publications" {:user {$in users}})
+         rand-nth
+         :_id
+         full-reaction-tree
+         aprint
+         time))
 
+
+  ((comp aprint float /)
+    (mc/count @db "reactions" {:source nil})
+    (mc/count @db "reactions"))
 
   )
