@@ -14,8 +14,9 @@
             [clj-time.coerce :as c]
             [clj-time.periodic :as p]
             [clojure.pprint :refer [pprint]]
-            [clojure.java.shell :refer [sh]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
+            [incanter.stats :refer [mean variance quantile]]
+
             [loom.graph :as lg]
             [loom.io :as lio]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
@@ -24,6 +25,12 @@
 (def time-interval {$gt (t/date-time 2014 8 1) $lt (t/date-time 2014 9 1)})
 
 (defrecord Publication [source reactions])
+
+(defn short-metrics [coll]
+  {:mean (mean coll)
+   :std (Math/sqrt (variance coll))
+   :quantiles (quantile coll)})
+
 
 (defn find-reactions [pid]
   (let [reactions (mc/find-maps @db "reactions" {:source pid})]
@@ -57,11 +64,9 @@
 (defn summary [tree]
   (loop [size 0
          max-path 0
-         delays []
          loc tree]
     (if (zip/end? loc)
       {:size size
-       :delays delays
        :height max-path}
       (recur
        (if (zip/node loc) (inc size) size)
@@ -143,9 +148,42 @@
          aprint
          time))
 
+  (def source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}})))
 
-  ((comp aprint float /)
-    (mc/count @db "reactions" {:source nil})
-    (mc/count @db "reactions"))
+  (def source-publications (mc/find-maps @db "publications" {:user {$in source-uids}}))
+
+  (def user-publications (mc/find-maps @db "publications" {:user {$nin source-uids}}))
+
+
+  ;; pub counts
+  (let [user-pub-count (mc/count @db "publications" {:user {$nin source-uids}})
+      source-pub-count (mc/count @db "publications" {:user {$in source-uids}})
+      overall-pub-count (mc/count @db "publications")]
+    (aprint [((comp float /) user-pub-count overall-pub-count)
+             ((comp float /) source-pub-count overall-pub-count)]))
+
+  ;; user counts
+  (let [user-count (mc/count @db "users" {:screen_name {$nin news-accounts}})
+      source-count (mc/count @db "users" {:screen_name {$in news-accounts}})
+      overall-count (mc/count @db "users")]
+    (aprint [(Math/log10 ((comp float /) user-count overall-count))
+             (Math/log10 ((comp float /) source-count overall-count))]))
+
+
+  ;; avg pub per source
+  (->> (map (fn [uid] [uid (mc/count @db "publications" {:user uid})]) source-uids)
+       (map second)
+       short-metrics
+       aprint)
+
+
+  ;; avg pub per user
+  (->> (mc/find-maps @db "publications" {:user {$nin source-uids}})
+       (map :user)
+       frequencies
+       vals
+       short-metrics
+       aprint
+       time)
 
   )

@@ -425,7 +425,7 @@ news-accounts
 ;; @@
 (defn short-metrics [coll]
   {:mean (mean coll)
-   :variance (variance coll)
+   :std (Math/sqrt (variance coll))
    :quantiles (quantile coll)})
 ;; @@
 ;; =>
@@ -548,11 +548,98 @@ news-accounts
 ;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>10.725150555659031</span>","value":"10.725150555659031"}],"value":"[:mean 10.725150555659031]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:variance</span>","value":":variance"},{"type":"html","content":"<span class='clj-double'>10728.604261859648</span>","value":"10728.604261859648"}],"value":"[:variance 10728.604261859648]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 2.0 4.0 6491.0)</span>","value":"(1.0 1.0 2.0 4.0 6491.0)"}],"value":"[:quantiles (1.0 1.0 2.0 4.0 6491.0)]"}],"value":"{:mean 10.725150555659031, :variance 10728.604261859648, :quantiles (1.0 1.0 2.0 4.0 6491.0)}"}
 ;; <=
 
+;; **
+;;; ### Hashtags of one-time-users
+;; **
+
 ;; @@
+  (let [user-freq (->> (mc/find-maps @db "publications")
+                       (map :user)
+                       frequencies)]
+    (->> user-freq
+         (remove (fn [[k v]] (> v 1)))
+         keys
+         (map #(mc/find-one-as-map @db "publications" {:user %}))
+         (map :hashtags)
+         flatten
+         (remove nil?)
+         frequencies
+         (sort-by second >)
+         (take 25)
+         (map (fn [[k v]] [(:text (mc/find-map-by-id @db "hashtags" k))
+                          v]))))
+
 
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-double'>1.0</span>","value":"1.0"}
+;;; {"type":"list-like","open":"<span class='clj-lazy-seq'>(</span>","close":"<span class='clj-lazy-seq'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Ferguson&quot;</span>","value":"\"Ferguson\""},{"type":"html","content":"<span class='clj-long'>506</span>","value":"506"}],"value":"[\"Ferguson\" 506]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Ukraine&quot;</span>","value":"\"Ukraine\""},{"type":"html","content":"<span class='clj-long'>445</span>","value":"445"}],"value":"[\"Ukraine\" 445]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;AFC&quot;</span>","value":"\"AFC\""},{"type":"html","content":"<span class='clj-long'>351</span>","value":"351"}],"value":"[\"AFC\" 351]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Kagawa&quot;</span>","value":"\"Kagawa\""},{"type":"html","content":"<span class='clj-long'>319</span>","value":"319"}],"value":"[\"Kagawa\" 319]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Gaza&quot;</span>","value":"\"Gaza\""},{"type":"html","content":"<span class='clj-long'>277</span>","value":"277"}],"value":"[\"Gaza\" 277]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;SOSCoveDolphins&quot;</span>","value":"\"SOSCoveDolphins\""},{"type":"html","content":"<span class='clj-long'>265</span>","value":"265"}],"value":"[\"SOSCoveDolphins\" 265]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;News&quot;</span>","value":"\"News\""},{"type":"html","content":"<span class='clj-long'>258</span>","value":"258"}],"value":"[\"News\" 258]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;BVB&quot;</span>","value":"\"BVB\""},{"type":"html","content":"<span class='clj-long'>255</span>","value":"255"}],"value":"[\"BVB\" 255]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;N24&quot;</span>","value":"\"N24\""},{"type":"html","content":"<span class='clj-long'>249</span>","value":"249"}],"value":"[\"N24\" 249]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Ebola&quot;</span>","value":"\"Ebola\""},{"type":"html","content":"<span class='clj-long'>226</span>","value":"226"}],"value":"[\"Ebola\" 226]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Israel&quot;</span>","value":"\"Israel\""},{"type":"html","content":"<span class='clj-long'>177</span>","value":"177"}],"value":"[\"Israel\" 177]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Germany&quot;</span>","value":"\"Germany\""},{"type":"html","content":"<span class='clj-long'>172</span>","value":"172"}],"value":"[\"Germany\" 172]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;ISIS&quot;</span>","value":"\"ISIS\""},{"type":"html","content":"<span class='clj-long'>172</span>","value":"172"}],"value":"[\"ISIS\" 172]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;RobinWilliams&quot;</span>","value":"\"RobinWilliams\""},{"type":"html","content":"<span class='clj-long'>165</span>","value":"165"}],"value":"[\"RobinWilliams\" 165]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;sltw14&quot;</span>","value":"\"sltw14\""},{"type":"html","content":"<span class='clj-long'>157</span>","value":"157"}],"value":"[\"sltw14\" 157]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Irak&quot;</span>","value":"\"Irak\""},{"type":"html","content":"<span class='clj-long'>156</span>","value":"156"}],"value":"[\"Irak\" 156]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;mufc&quot;</span>","value":"\"mufc\""},{"type":"html","content":"<span class='clj-long'>146</span>","value":"146"}],"value":"[\"mufc\" 146]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;IceBucketChallenge&quot;</span>","value":"\"IceBucketChallenge\""},{"type":"html","content":"<span class='clj-long'>139</span>","value":"139"}],"value":"[\"IceBucketChallenge\" 139]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;afc&quot;</span>","value":"\"afc\""},{"type":"html","content":"<span class='clj-long'>132</span>","value":"132"}],"value":"[\"afc\" 132]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;IS&quot;</span>","value":"\"IS\""},{"type":"html","content":"<span class='clj-long'>124</span>","value":"124"}],"value":"[\"IS\" 124]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;DalaiLama&quot;</span>","value":"\"DalaiLama\""},{"type":"html","content":"<span class='clj-long'>120</span>","value":"120"}],"value":"[\"DalaiLama\" 120]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Buddhist&quot;</span>","value":"\"Buddhist\""},{"type":"html","content":"<span class='clj-long'>119</span>","value":"119"}],"value":"[\"Buddhist\" 119]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;Russland&quot;</span>","value":"\"Russland\""},{"type":"html","content":"<span class='clj-long'>117</span>","value":"117"}],"value":"[\"Russland\" 117]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;EU&quot;</span>","value":"\"EU\""},{"type":"html","content":"<span class='clj-long'>106</span>","value":"106"}],"value":"[\"EU\" 106]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-string'>&quot;FCB&quot;</span>","value":"\"FCB\""},{"type":"html","content":"<span class='clj-long'>99</span>","value":"99"}],"value":"[\"FCB\" 99]"}],"value":"([\"Ferguson\" 506] [\"Ukraine\" 445] [\"AFC\" 351] [\"Kagawa\" 319] [\"Gaza\" 277] [\"SOSCoveDolphins\" 265] [\"News\" 258] [\"BVB\" 255] [\"N24\" 249] [\"Ebola\" 226] [\"Israel\" 177] [\"Germany\" 172] [\"ISIS\" 172] [\"RobinWilliams\" 165] [\"sltw14\" 157] [\"Irak\" 156] [\"mufc\" 146] [\"IceBucketChallenge\" 139] [\"afc\" 132] [\"IS\" 124] [\"DalaiLama\" 120] [\"Buddhist\" 119] [\"Russland\" 117] [\"EU\" 106] [\"FCB\" 99])"}
+;; <=
+
+;; **
+;;; ## Post metrics
+;; **
+
+;; @@
+(def source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}})))
+(def source-publications (mc/find-maps @db "publications" {:user {$in source-uids}}))
+(def user-publications (mc/find-maps @db "publications" {:user {$nin source-uids}}))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;unsightly-reserve/user-publications</span>","value":"#'unsightly-reserve/user-publications"}
+;; <=
+
+;; @@
+(let [user-pub-count (mc/count @db "publications" {:user {$nin source-uids}})
+      source-pub-count (mc/count @db "publications" {:user {$in source-uids}})
+      overall-pub-count (mc/count @db "publications")]
+  [ ((comp float /) source-pub-count user-pub-count)
+(bar-chart ["user" "source"] [(/ user-pub-count overall-pub-count) (/ source-pub-count overall-pub-count)])])
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"html","content":"<span class='clj-unkown'>0.07629545</span>","value":"0.07629545"},{"type":"vega","content":{"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"scales":[{"name":"x","type":"ordinal","range":"width","domain":{"data":"0e9496db-dac2-4114-907e-0d97205034e3","field":"data.x"}},{"name":"y","range":"height","nice":true,"domain":{"data":"0e9496db-dac2-4114-907e-0d97205034e3","field":"data.y"}}],"marks":[{"type":"rect","from":{"data":"0e9496db-dac2-4114-907e-0d97205034e3"},"properties":{"enter":{"y":{"scale":"y","field":"data.y"},"width":{"offset":-1,"scale":"x","band":true},"x":{"scale":"x","field":"data.x"},"y2":{"scale":"y","value":0}},"update":{"fill":{"value":"steelblue"},"opacity":{"value":1}},"hover":{"fill":{"value":"#FF29D2"}}}}],"data":[{"name":"0e9496db-dac2-4114-907e-0d97205034e3","values":[{"x":"user","y":0.9291129120180251},{"x":"source","y":0.07088708798197478}]}],"width":400,"height":247.2187957763672,"padding":{"bottom":20,"top":10,"right":10,"left":50}},"value":"#gorilla_repl.vega.VegaView{:content {:axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :scales [{:name \"x\", :type \"ordinal\", :range \"width\", :domain {:data \"0e9496db-dac2-4114-907e-0d97205034e3\", :field \"data.x\"}} {:name \"y\", :range \"height\", :nice true, :domain {:data \"0e9496db-dac2-4114-907e-0d97205034e3\", :field \"data.y\"}}], :marks [{:type \"rect\", :from {:data \"0e9496db-dac2-4114-907e-0d97205034e3\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"steelblue\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}}], :data [{:name \"0e9496db-dac2-4114-907e-0d97205034e3\", :values ({:x \"user\", :y 127832/137585} {:x \"source\", :y 9753/137585})}], :width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}}}"}],"value":"[0.07629545 #gorilla_repl.vega.VegaView{:content {:axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :scales [{:name \"x\", :type \"ordinal\", :range \"width\", :domain {:data \"0e9496db-dac2-4114-907e-0d97205034e3\", :field \"data.x\"}} {:name \"y\", :range \"height\", :nice true, :domain {:data \"0e9496db-dac2-4114-907e-0d97205034e3\", :field \"data.y\"}}], :marks [{:type \"rect\", :from {:data \"0e9496db-dac2-4114-907e-0d97205034e3\"}, :properties {:enter {:y {:scale \"y\", :field \"data.y\"}, :width {:offset -1, :scale \"x\", :band true}, :x {:scale \"x\", :field \"data.x\"}, :y2 {:scale \"y\", :value 0}}, :update {:fill {:value \"steelblue\"}, :opacity {:value 1}}, :hover {:fill {:value \"#FF29D2\"}}}}], :data [{:name \"0e9496db-dac2-4114-907e-0d97205034e3\", :values ({:x \"user\", :y 127832/137585} {:x \"source\", :y 9753/137585})}], :width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}}}]"}
+;; <=
+
+;; **
+;;; ### Source User Ratio
+;; **
+
+;; @@
+(let [user-count (mc/count @db "users" {:screen_name {$nin news-accounts}})
+      source-count (mc/count @db "users" {:screen_name {$in news-accounts}})
+      overall-count (mc/count @db "users")]
+    ((comp float /) source-count user-count))
+
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>2.1431306E-4</span>","value":"2.1431306E-4"}
+;; <=
+
+;; **
+;;; ### Average Source Post-Rate
+;; **
+
+;; @@
+ (->> (map (fn [uid] [uid (mc/count @db "publications" {:user uid})]) source-uids)
+       (map second)
+       short-metrics)
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>1393.2857142857142</span>","value":"1393.2857142857142"}],"value":"[:mean 1393.2857142857142]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:std</span>","value":":std"},{"type":"html","content":"<span class='clj-double'>710.7663717177644</span>","value":"710.7663717177644"}],"value":"[:std 710.7663717177644]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(271.0 947.75 1472.0 1803.25 2919.0)</span>","value":"(271.0 947.75 1472.0 1803.25 2919.0)"}],"value":"[:quantiles (271.0 947.75 1472.0 1803.25 2919.0)]"}],"value":"{:mean 1393.2857142857142, :std 710.7663717177644, :quantiles (271.0 947.75 1472.0 1803.25 2919.0)}"}
+;; <=
+
+;; **
+;;; ### Average User Post-Rate
+;; **
+
+;; @@
+(->> (mc/find-maps @db "publications" {:user {$nin source-uids}})
+       (map :user)
+       frequencies
+       vals
+       short-metrics)
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:mean</span>","value":":mean"},{"type":"html","content":"<span class='clj-double'>4.046725125834943</span>","value":"4.046725125834943"}],"value":"[:mean 4.046725125834943]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:std</span>","value":":std"},{"type":"html","content":"<span class='clj-double'>19.614712500426073</span>","value":"19.614712500426073"}],"value":"[:std 19.614712500426073]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:quantiles</span>","value":":quantiles"},{"type":"html","content":"<span class='clj-unkown'>(1.0 1.0 1.0 2.0 2215.0)</span>","value":"(1.0 1.0 1.0 2.0 2215.0)"}],"value":"[:quantiles (1.0 1.0 1.0 2.0 2215.0)]"}],"value":"{:mean 4.046725125834943, :std 19.614712500426073, :quantiles (1.0 1.0 1.0 2.0 2215.0)}"}
 ;; <=
 
 ;; @@
