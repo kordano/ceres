@@ -16,7 +16,6 @@
             [clojure.pprint :refer [pprint]]
             [opennlp.nlp :refer [make-tokenizer make-detokenizer]]
             [incanter.stats :refer [mean variance quantile]]
-
             [loom.graph :as lg]
             [loom.io :as lio]
             [ceres.collector :refer [db custom-formatter news-accounts store]])
@@ -58,7 +57,7 @@
    (fn [node] true)
    (fn [node] (:reactions node))
    (fn [node new-children] (assoc-in node [:reactions] new-children))
-   (find-reactions pub)))
+   (find-full-reactions pub)))
 
 
 (defn summary [tree]
@@ -72,6 +71,27 @@
        (if (zip/node loc) (inc size) size)
        (if (zip/node loc) (-> loc zip/path count (max max-path)) max-path)
        (zip/next loc)))))
+
+
+(defn analyze-delays
+  "Create tree analyzing delay times relativ to first post time"
+  [tree]
+  (loop [delays []
+         loc tree]
+    (if (zip/end? loc)
+      {:source (-> (zip/root tree) :source :_id)
+       :delays delays}
+      (recur
+       (if (zip/node loc)
+         (let [pub-time (-> (zip/root tree) :source :ts)
+               post-delay (if (t/after? (-> loc zip/node :source :ts) pub-time)
+                            (t/interval pub-time (-> loc zip/node :source :ts))
+                            (t/interval (-> loc zip/node :source :ts) pub-time))]
+           (conj delays (t/in-seconds post-delay)))
+         delays)
+       (zip/next loc)))))
+
+
 
 
 (defn hashtags-of-the-day [date]
@@ -104,7 +124,6 @@
 
 
 (comment
-
 
   ;; hashtag distribution of one-time-posters
   (let [user-freq (->> (mc/find-maps @db "publications")
@@ -142,48 +161,12 @@
 
   (let [users (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))]
     (->> (mc/find-maps @db "publications" {:user {$in users}})
-         rand-nth
-         :_id
-         full-reaction-tree
-         aprint
+         (pmap (comp analyze-delays full-reaction-tree :_id))
+         (pmap :delays)
+         flatten
+         frequencies
+         (sort-by first >)
          time))
 
-  (def source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}})))
-
-  (def source-publications (mc/find-maps @db "publications" {:user {$in source-uids}}))
-
-  (def user-publications (mc/find-maps @db "publications" {:user {$nin source-uids}}))
-
-
-  ;; pub counts
-  (let [user-pub-count (mc/count @db "publications" {:user {$nin source-uids}})
-      source-pub-count (mc/count @db "publications" {:user {$in source-uids}})
-      overall-pub-count (mc/count @db "publications")]
-    (aprint [((comp float /) user-pub-count overall-pub-count)
-             ((comp float /) source-pub-count overall-pub-count)]))
-
-  ;; user counts
-  (let [user-count (mc/count @db "users" {:screen_name {$nin news-accounts}})
-      source-count (mc/count @db "users" {:screen_name {$in news-accounts}})
-      overall-count (mc/count @db "users")]
-    (aprint [(Math/log10 ((comp float /) user-count overall-count))
-             (Math/log10 ((comp float /) source-count overall-count))]))
-
-
-  ;; avg pub per source
-  (->> (map (fn [uid] [uid (mc/count @db "publications" {:user uid})]) source-uids)
-       (map second)
-       short-metrics
-       aprint)
-
-
-  ;; avg pub per user
-  (->> (mc/find-maps @db "publications" {:user {$nin source-uids}})
-       (map :user)
-       frequencies
-       vals
-       short-metrics
-       aprint
-       time)
 
   )
