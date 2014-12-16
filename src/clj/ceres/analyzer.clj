@@ -125,7 +125,6 @@
           (map (fn [[k v]] [(:screen_name (mc/find-map-by-id @db "users" k))
                            v])))]))
 
-
 (defn create-d3-graph
   "Converts zipper into d3 readable format"
   [tree]
@@ -219,7 +218,7 @@
         graph (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
              (pmap (comp summary reaction-tree :_id))
              (sort-by :size >)
-             (take 3)
+             (take 4)
              last
              :source
              full-reaction-tree
@@ -233,7 +232,7 @@
                            {:name k
                             :group (dispatch-types (get types k))})
                          %))]
-    (with-open [w (clojure.java.io/writer "resources/graph-3b.edn")]
+    (with-open [w (clojure.java.io/writer "resources/graph-4.edn")]
       (binding [*print-length* false
                 *out* w]
         (pr cleaned-graph))))
@@ -260,8 +259,16 @@
      (mc/count @db "reactions"))
 
 
-  (mc/find-maps @db "origins" {:source nil
-                               :ts {$gt (t/date-time 2014 8 1)
-                                    $lt (t/date-time 2014 9 1)}})
+  ;; asdasd
+
+  (mc/count @db "origins" {:source nil
+                               :ts time-interval })
+
+  (->> (mc/count @db "tweets" {:created_at time-interval
+                               :user.screen_name {$nin news-accounts}
+                               :retweeted_status.id_str nil
+                               :in_reply_to_status_id_str nil})
+       aprint
+       time)
 
 )
