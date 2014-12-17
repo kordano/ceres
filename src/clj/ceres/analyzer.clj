@@ -131,28 +131,27 @@
   (loop [counter 0
          types {}
          nodes []
+         texts {}
          links []
          loc tree]
     (if (zip/end? loc)
       {:nodes nodes
        :types types
+       :texts texts
        :links links}
-      (recur
-       (if (zip/node loc)
-         (inc counter)
-         counter)
-       (if-let [node (zip/node loc)]
-         (assoc types (-> node :source :_id str) (-> node :source :type))
-         types)
-       (if-let [node (zip/node loc)]
-         (conj nodes (->> node :source :tweet (mc/find-map-by-id @db "tweets") :text str))
-         nodes)
-       (if-let [node (zip/node loc)]
-         (if-not (= node (zip/root tree))
-           (conj links {:source counter :target (.indexOf nodes (-> loc zip/up zip/node :source :_id str))})
-           links)
-         links)
-       (zip/next loc)))))
+      (if-let [node (zip/node loc)]
+        (let [status-text (->> node :source :tweet (mc/find-map-by-id @db "tweets") :text str)
+              id (-> node :source :_id str)]
+          (recur
+           (inc counter)
+           (assoc types id (-> node :source :type))
+           (vec (conj nodes id))
+           (assoc texts id status-text)
+           (if-not (= node (zip/root tree))
+             (conj links {:source counter :target (.indexOf nodes (-> loc zip/up zip/node :source :_id str))})
+             links)
+           (zip/next loc)))
+        (recur counter types nodes texts links (zip/next loc))))))
 
 
 (comment
@@ -206,44 +205,47 @@
                                              :ts {$lt (t/date-time 2014 9 1)}})
            (pmap (comp :delays analyze-delays full-reaction-tree :_id)))))
 
-  (defn dispatch-types [type]
-    (case type
-      "source" 0
-      "retweet" 1
-      "reply" 2
-      "share" 3
-      4))
 
-  (let [source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
-        graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
-                    (pmap (comp summary reaction-tree :_id))
-                    (sort-by :size >)
-                    (take 10)
-                    (pmap (comp create-d3-graph full-reaction-tree :source)))
-        cleaned-graphs
-        (pmap
-         (fn [graph]
-           (let [types (:types graph)]
-             (update-in
-              (dissoc graph :types)
-              [:nodes]
-              #(mapv
-                (fn [k]
-                  {:name k
-                   :group (dispatch-types (get types k))})
-                %))))
-         graphs)]
-    (time
-     (loop [gs cleaned-graphs
-            counter 0]
-       (when-not (empty? gs)
-         (with-open [w (clojure.java.io/writer (str "data/graph-" counter ".edn"))]
-           (binding [*print-length* false
-                     *out* w]
-             (pr (first gs))))
-         (recur
-          (rest gs)
-          (inc counter))))))
+
+  (letfn [(dispatch-types [type]
+            (case type
+              "source" 0
+              "retweet" 1
+              "reply" 2
+              "share" 3
+              4))]
+    (let [source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
+          graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
+                      (pmap (comp summary reaction-tree :_id))
+                      (sort-by :size >)
+                      (take 10)
+                      (pmap (comp create-d3-graph full-reaction-tree :source)))
+          cleaned-graphs
+          (pmap
+           (fn [graph]
+             (let [types (:types graph)
+                   texts (:texts graph)]
+               (update-in
+                (dissoc graph :types)
+                [:nodes]
+                #(mapv
+                  (fn [k]
+                    {:name k
+                     :value (get texts k)
+                     :group (dispatch-types (get types k))})
+                  %))))
+           graphs)]
+      (time
+       (loop [gs cleaned-graphs
+              counter 0]
+         (when-not (empty? gs)
+           (with-open [w (clojure.java.io/writer (str "data/graph-" counter ".edn"))]
+             (binding [*print-length* false
+                       *out* w]
+               (pr (first gs))))
+           (recur
+            (rest gs)
+            (inc counter)))))))
 
 
   ;; find all related shares
@@ -286,6 +288,8 @@
                     :source
                     full-reaction-tree
                     create-d3-graph)]
-  (aprint (-> graphs :nodes first)))
+  (aprint  [ (->> graphs :links (take 5))
+             (->> graphs :texts (take 5))
+             ]))
 
 )
