@@ -145,7 +145,7 @@
          (assoc types (-> node :source :_id str) (-> node :source :type))
          types)
        (if-let [node (zip/node loc)]
-         (conj nodes (-> node :source :_id str))
+         (conj nodes (->> node :source :tweet (mc/find-map-by-id @db "tweets") :text str))
          nodes)
        (if-let [node (zip/node loc)]
          (if-not (= node (zip/root tree))
@@ -216,31 +216,34 @@
 
   (let [source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
         graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
-             (pmap (comp summary reaction-tree :_id))
-             (sort-by :size >)
-             (take 10)
-             (pmap (comp create-d3-graph full-reaction-tree :source)))
-        types (:types (first graphs))
-        cleaned-graphs (pmap (fn [graph]
-                               (update-in
-                                  (dissoc graph :types)
-                                  [:nodes]
-                                  #(mapv
-                                    (fn [k]
-                                      {:name k
-                                       :group (dispatch-types (get types k))})
-                                    %)))
-                             graphs)]
-    (loop [gs cleaned-graphs
-           counter 0]
-      (when-not (empty? gs)
-        (with-open [w (clojure.java.io/writer (str "data/graph-" counter ".edn"))]
-          (binding [*print-length* false
-                    *out* w]
-            (pr (first gs))))
-        (recur
-         (rest gs)
-         (inc counter)))))
+                    (pmap (comp summary reaction-tree :_id))
+                    (sort-by :size >)
+                    (take 10)
+                    (pmap (comp create-d3-graph full-reaction-tree :source)))
+        cleaned-graphs
+        (pmap
+         (fn [graph]
+           (let [types (:types graph)]
+             (update-in
+              (dissoc graph :types)
+              [:nodes]
+              #(mapv
+                (fn [k]
+                  {:name k
+                   :group (dispatch-types (get types k))})
+                %))))
+         graphs)]
+    (time
+     (loop [gs cleaned-graphs
+            counter 0]
+       (when-not (empty? gs)
+         (with-open [w (clojure.java.io/writer (str "data/graph-" counter ".edn"))]
+           (binding [*print-length* false
+                     *out* w]
+             (pr (first gs))))
+         (recur
+          (rest gs)
+          (inc counter))))))
 
 
   ;; find all related shares
@@ -275,5 +278,14 @@
                                :in_reply_to_status_id_str nil})
        aprint
        time)
+(let [source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
+        graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
+                    (pmap (comp summary reaction-tree :_id))
+                    (sort-by :size >)
+                    first
+                    :source
+                    full-reaction-tree
+                    create-d3-graph)]
+  (aprint (-> graphs :nodes first)))
 
 )
