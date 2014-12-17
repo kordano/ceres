@@ -218,7 +218,7 @@
           graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
                       (pmap (comp summary reaction-tree :_id))
                       (sort-by :size >)
-                      (take 10)
+                      (take 50)
                       (pmap (comp create-d3-graph full-reaction-tree :source)))
           cleaned-graphs
           (pmap
@@ -259,8 +259,6 @@
 
 
   (->> (mc/find-maps @db "publications" {:type :share})
-       (pmap (comp #(mc/find-one-as-map @db "reactions" {:publication %}) :_id))
-       (remove nil?)
        count
        aprint
        time)
@@ -280,16 +278,42 @@
                                :in_reply_to_status_id_str nil})
        aprint
        time)
-(let [source-uids (map :_id (mc/find-maps @db "users" {:screen_name {$in news-accounts}}))
-        graphs (->> (mc/find-maps @db "publications" {:user {$in source-uids}})
-                    (pmap (comp summary reaction-tree :_id))
-                    (sort-by :size >)
-                    first
-                    :source
-                    full-reaction-tree
-                    create-d3-graph)]
-  (aprint  [ (->> graphs :links (take 5))
-             (->> graphs :texts (take 5))
-             ]))
 
-)
+  (->> (mc/find-maps @db "origins" {:source nil
+                                    :article {$ne nil}
+                                    :ts time-interval})
+       (pmap (fn [{:keys [tweet article]}] [article (mc/find-map-by-id @db "tweets" tweet)]))
+       (pmap (fn [[article {:keys [in_reply_to_status_id retweeted_status] :as tweet}]]
+               (if (or in_reply_to_status_id retweeted_status)
+                 :no-share
+                 [article tweet])))
+       (remove #{:no-share})
+       (take 10)
+       (map first)
+       (pmap #(mc/find-map-by-id @db "articles" %))
+       (map :url)
+       (map #(mc/find-one-as-map @db "urls" {:url %}))
+       aprint)
+
+
+  (mc/count @db "urls")
+
+  (mc/count @db "articles" {:ts time-interval})
+
+
+  (->> (mc/find-maps @db "articles" {:ts time-interval})
+       (pmap (comp (fn [{:keys [user]}] (:screen_name user)) #(mc/find-one-as-map @db "tweets" {:created_at %}) :ts))
+       (into #{}))
+
+
+  (mc/count @db "tweets" {:created_at time-interval
+                          :user.screen_name {$in news-accounts}})
+
+  (mc/count @db "tweets" {:created_at time-interval
+                          :user.screen_name {$nin news-accounts}
+                          :in_reply_to_status_id {$ne nil}
+                          :retweeted_status nil})
+
+  (mc/count @db "publications" {:type :reply})
+
+  )
