@@ -1,81 +1,3 @@
-;; --- Tweet ---
-[{:db/id #db/id[:db.part/db]
-  :db/ident :tweet/user
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/one
-  :db/doc "A tweet's user"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/text
-  :db/valueType :db.type/string
-  :db/cardinality :db.cardinality/one
-  :db/fulltext true
-  :db/index true
-  :db/doc "A tweet's text"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/type
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/one
-  :db/doc "A tweet's type"
-  :db.install/_attribute :db.part/db}
-
- ;; basic tweet types
- {:db/id #db/id[:db.part/tweet -2]
-  :db/ident :tweet.type/retweet}
-
- {:db/id #db/id[:db.part/tweet -3]
-  :db/ident :tweet.type/shared}
-
- {:db/id #db/id[:db.part/tweet -4]
-  :db/ident :tweet.type/reply}
-
- {:db/id #db/id[:db.part/tweet -5]
-  :db/ident :tweet.type/source}
-
- {:db/id #db/id[:db.part/tweet -6]
-  :db/ident :tweet.type/article}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/hashtags
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/many
-  :db/doc "A tweet's hashtags"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/id
-  :db/valueType :db.type/long
-  :db/cardinality :db.cardinality/one
-  :db/unique :db.unique/identity
-  :db/doc "A tweet's id"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/reactions
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/many
-  :db/doc "A tweet's reactions"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/mentions
-  :db/valueType :db.type/ref
-  :db/cardinality :db.cardinality/many
-  :db/doc "A tweet's user mentions"
-  :db.install/_attribute :db.part/db}
-
- {:db/id #db/id[:db.part/db]
-  :db/ident :tweet/url
-  :db/valueType :db.type/string
-  :db/fulltext true
-  :db/cardinality :db.cardinality/many
-  :db/doc "A tweet's url if exist"
-  :db.install/_attribute :db.part/db}]
-
-
 ;; --- User ---
 [{:db/id #db/id[:db.part/db]
   :db/ident :user/screen-name
@@ -106,6 +28,122 @@
   :db/doc "A users's follower count"
   :db.install/_attribute :db.part/db}]
 
+;; --- Publication ---
+[{:db/id #db/id[:db.part/db]
+  :db/ident :publication/author
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "A publications's author"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/tweet
+  :db/valueType :db.type/long
+  :db/cardinality :db.cardinality/one
+  :db/unique :db.unique/identity
+  :db/doc "A publications's tweet id"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/url
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "A publications's url"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/type
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "A publication's type"
+  :db.install/_attribute :db.part/db}
+
+ ;; basic publication types
+ {:db/id #db/id[:db.part/publiication -2]
+  :db/ident :publication.type/retweet}
+
+ {:db/id #db/id[:db.part/publiication -3]
+  :db/ident :publication.type/shared}
+
+ {:db/id #db/id[:db.part/publiication -4]
+  :db/ident :publication.type/reply}
+
+ {:db/id #db/id[:db.part/publiication -5]
+  :db/ident :publication.type/source}
+
+ {:db/id #db/id[:db.part/publiication -6]
+  :db/ident :publication.type/unrelated}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/hashtags
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/many
+  :db/doc "The publication's hashtags"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/mentions
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/many
+  :db/doc "Publication's user mentions"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/ts
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "Publication's creation time"
+  :db.install/_attribute :db.part/db}]
+
+
+;; --- Mention ---
+[{:db/id #db/id[:db.part/db]
+  :db/ident :mention/user
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "A mentions's user"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :mention/publication
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "A mentions's publication"
+  :db.install/_attribute :db.part/db}]
+
+
+;; --- Urls ---
+[{:db/id #db/id[:db.part/db]
+  :db/ident :url/ts
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "Url's creation time"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :url/author
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "Url's author"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :url/address
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/unique :db.unique/identity
+  :db/fulltext true
+  :db/doc "Url's address"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :url/tweet
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/unique :db.unique/identity
+  :db/doc "Url's address"
+  :db.install/_attribute :db.part/db}]
+
 
 ;; --- Hashtag ---
 [{:db/id #db/id[:db.part/db]
@@ -115,4 +153,20 @@
   :db/unique :db.unique/identity
   :db/fulltext true
   :db/doc "A hashtags's text"
+  :db.install/_attribute :db.part/db}]
+
+
+;; --- Reaction ---
+[{:db/id #db/id[:db.part/db]
+  :db/ident :reaction/publication
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "Reaction's publication"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :reaction/origin
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "Reaction's origin"
   :db.install/_attribute :db.part/db}]

@@ -95,8 +95,6 @@
        (zip/next loc)))))
 
 
-
-
 (defn hashtags-of-the-day [date]
   (let [pubs (mc/find-maps @db "publications" {:ts {$gt date
                                                     $lt (t/plus date (t/days 1))}})]
