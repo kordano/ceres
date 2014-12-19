@@ -46,3 +46,28 @@
 
 (defn init-schema [conn path]
   (transact-all conn (io/resource path)))
+
+(defn transact-user
+  "doc-string"
+  [conn {:keys [screen_name id created_at]}]
+  (d/transact
+   conn
+   [{:db/id (d/tempid :db.part/user)
+     :user/id (long id)
+     :user/screen-name screen_name
+     :user/created (c/to-date created_at)}]))
+
+
+(comment
+
+  (def conn (scratch-conn))
+
+  (init-schema conn "schema.edn")
+
+  (doall
+   (pmap #(transact-user conn %) (mc/find-maps @db "users")))
+
+
+
+
+)
