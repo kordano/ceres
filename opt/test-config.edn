@@ -1,0 +1,20 @@
+{:port 8082
+ :build :dev ;; use :prod for static paths and optimized js files otherwise :dev
+ :version 0.0 ;; currently deployed version
+ :date "2014-12-04" ;; date of deployment
+ :logging? false ;; activate logging
+ :logfile "/path/to/logfile" ;; if logging activated this is the file the log is written to
+ :init? false ;; if the server runs for the first time, mongodb indices have to be build
+ :http-server? false ;; decide wether the http-server is needed
+ :backup? true ;; activate regular backup
+ :backup-folder "/path/to/backup-folder"
+ :app ;; twitter related configs
+ {:db "athena" ;; specify mongodb database
+  :credentials ;; refer to twitter dev site
+  {:consumer-key "wQ1jVJPRrmj5zb1Xpr0VjToYf"
+   :consumer-secret "PjwGeITzGvELnfTKuVdgpCJp29QXGcpuUu3AhQZPrnomOUYrqw"
+   :access-token "2552274109-jm5mLYjJgvMMKmXQKrq811APqwSpB97pJNAuVre"
+   :access-token-secret "vQSfK9AVZqkekpVmlpWjcqpSw3nI9HGW1N12t7Y3Y0HHl"}
+  :follow [114508061 18016521 5734902 40227292 2834511 9204502 15071293 19232587 15243812 8720562 1101354170 15738602 18774524 5494392]
+  :track ["@FAZ_NET" "@tagesschau" "@dpa" "@SZ" "@SPIEGELONLINE" "@BILD" "@DerWesten" "@ntvde" "@tazgezwitscher" "@welt" "@ZDFheute" "@N24_de" "@sternde" "@focusonline"]}
+  }}

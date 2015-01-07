@@ -30,11 +30,19 @@
   :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]
-  :db/ident :publication/tweet
+  :db/ident :publication/mongo-tweet
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
   :db/unique :db.unique/identity
   :db/doc "A publications's tweet id in mongodb"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :publication/tweet-id
+  :db/valueType :db.type/ling
+  :db/cardinality :db.cardinality/one
+  :db/unique :db.unique/identity
+  :db/doc "A publications's tweet id given by twitter"
   :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]

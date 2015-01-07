@@ -17,7 +17,7 @@
 (defn- scratch-conn
   "Create a connection to an anonymous, in-memory database."
   []
-  (let [uri (str "datomic:mem://" (d/squuid))]
+  (let [uri (str "datomic:mem://ceres-test")]
     (d/delete-database uri)
     (d/create-database uri)
     (d/connect uri)))
@@ -60,56 +60,54 @@
 
 
 (defn find-user
-  "Query for user"
-  [db id]
+  "Query for user using datomic db"
+  [conn id]
   (ffirst
    (d/q '[:find ?r
           :in $ ?id
           :where
           [?r :user/id ?id]]
-        db id)))
+        (d/db conn) id)))
 
 
 (defn transact-url
   "Transact url and meta data"
-  [conn {:keys [url author ts mongo-id]}]
+  [conn {:keys [url author ts tweet-id]}]
   (d/transact
    conn
    [{:db/id (d/tempid :db.part/user)
      :url/author author
      :url/address url
-     :url/ts ts
-     :url/initial-tweet mongo-id}]))
+     :url/ts (c/to-date ts)
+     :url/initial-tweet tweet-id}]))
 
 
 (defn find-url
-  "Query for specific url-string"
-  [db url]
+  "Query for specific url-string using datomic db"
+  [conn url]
   (d/q '[:find ?r
          :in $ ?url
          :where
          [?r :url/address ?url]]
-       db url))
+      (d/db conn) url))
 
 
 (defn transact-publication
   "Transact publication into datomic"
-  [conn {:keys [user mongo-id url ts]}]
+  [conn {:keys [user tweet-id mongo-id url ts]}]
   (d/transact
    conn
    [{:db/id (d/tempid :db.part/user)
      :publication/author user
-     :publication/tweet mongo-id
+     :publication/mongo-tweet mongo-id
+     :publication/tweet-id tweet-id
      :publication/url url
-     :publication/ts ts}])
-  )
+     :publication/ts ts}]))
 
 
 (comment
 
   (def conn (scratch-conn))
-
-  (def ddb (d/db conn))
 
   (init-schema conn "schema.edn")
 
@@ -118,6 +116,38 @@
     (pmap #(transact-user conn %) (mc/find-maps @db "users"))))
 
 
+  (time
+   (doall
+    (pmap
+     (comp
+      (fn [{:keys [user tweet url ts]}]
+        (transact-url conn {:url url :author user :ts ts :tweet-id tweet}))
+      (fn [url]
+        (update-in url [:user] #(find-user conn (:id (mc/find-map-by-id @db "users" %)))))
+      (fn [url]
+        (update-in url [:tweet] #(:id (mc/find-map-by-id @db "tweets" %)))))
+     (mc/find-maps @db "urls"))))
+
+
+  (->> (mc/find-maps @db "urls")
+       (pmap
+        (fn [url] (:id (mc/find-map-by-id @db "tweets" (:tweet url)))))
+       (remove nil?)
+       (take 30))
+
+
+  (->> (d/q '[:find ?r ?tid
+              :where
+              [?r :url/initial-tweet ?tid]]
+            (d/db conn))
+       count)
+
+
+  (->> (mc/find-maps @db "urls")
+       vec
+       (pmap :url)
+       (into #{})
+       count)
 
 
 )
