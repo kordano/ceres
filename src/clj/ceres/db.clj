@@ -94,7 +94,7 @@
 
 (defn transact-publication
   "Transact publication into datomic"
-  [conn {:keys [user tweet-id mongo-id url ts]}]
+  [conn {:keys [user tweet-id mongo-id url ts hashtags pub-type]}]
   (d/transact
    conn
    [{:db/id (d/tempid :db.part/user)
@@ -102,7 +102,19 @@
      :publication/mongo-tweet mongo-id
      :publication/tweet-id tweet-id
      :publication/url url
-     :publication/ts ts}]))
+     :publication/ts ts
+     :publication/type pub-type
+     :publication/hashtags hashtags}]))
+
+
+(defn transact-reaction
+  "Transact reaction using two pub ids into datomic"
+  [conn publication origin]
+  (d/transact
+   conn
+   [{:db/id (d/tempid :db.part/user)
+     :reaction/publication publication
+     :reaction/origin origin}]))
 
 
 (comment
@@ -110,6 +122,7 @@
   (def conn (scratch-conn))
 
   (init-schema conn "schema.edn")
+
 
   (time
    (doall
@@ -126,19 +139,27 @@
         (update-in url [:user] #(find-user conn (:id (mc/find-map-by-id @db "users" %)))))
       (fn [url]
         (update-in url [:tweet] #(:id (mc/find-map-by-id @db "tweets" %)))))
-     (mc/find-maps @db "urls"))))
+     (take 1000 (mc/find-maps @db "urls")))))
+
 
 
   (->> (mc/find-maps @db "urls")
-       (pmap
-        (fn [url] (:id (mc/find-map-by-id @db "tweets" (:tweet url)))))
-       (remove nil?)
-       (take 30))
+       (take 100)
+       (pmap #(:id (mc/find-map-by-id @db "tweets" (:tweet %))))
+       (into #{})
+       count)
+
+  (->> (d/q '[:find ?r ?url
+              :where
+              [?r :url/address ?url]]
+            (d/db conn))
+       count)
+
 
 
   (->> (d/q '[:find ?r ?tid
               :where
-              [?r :url/initial-tweet ?tid]]
+              [?r :user/id ?tid]]
             (d/db conn))
        count)
 

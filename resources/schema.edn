@@ -77,7 +77,7 @@
 
  {:db/id #db/id[:db.part/db]
   :db/ident :publication/hashtags
-  :db/valueType :db.type/ref
+  :db/valueType :db.type/string
   :db/cardinality :db.cardinality/many
   :db/doc "The publication's hashtags"
   :db.install/_attribute :db.part/db}
@@ -132,7 +132,6 @@
   :db/ident :url/address
   :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
-  :db/unique :db.unique/identity
   :db/fulltext true
   :db/doc "Url's address"
   :db.install/_attribute :db.part/db}
@@ -141,7 +140,6 @@
   :db/ident :url/initial-tweet
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/one
-  :db/unique :db.unique/identity
   :db/doc "Url's address"
   :db.install/_attribute :db.part/db}]
 
