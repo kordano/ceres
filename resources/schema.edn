@@ -31,10 +31,10 @@
 
  {:db/id #db/id[:db.part/db]
   :db/ident :publication/tweet
-  :db/valueType :db.type/long
+  :db/valueType :db.type/string
   :db/cardinality :db.cardinality/one
   :db/unique :db.unique/identity
-  :db/doc "A publications's tweet id"
+  :db/doc "A publications's tweet id in mongodb"
   :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]
@@ -130,7 +130,7 @@
   :db.install/_attribute :db.part/db}
 
  {:db/id #db/id[:db.part/db]
-  :db/ident :url/tweet
+  :db/ident :url/initial-tweet
   :db/valueType :db.type/ref
   :db/cardinality :db.cardinality/one
   :db/unique :db.unique/identity
