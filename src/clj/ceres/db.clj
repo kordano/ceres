@@ -83,7 +83,7 @@
 
 
 (defn find-url
-  "Query for specific url-string using datomic db"
+  "Query for specific url-string"
   [conn url]
   (d/q '[:find ?r
          :in $ ?url
@@ -93,7 +93,7 @@
 
 
 (defn transact-publication
-  "Transact publication into datomic"
+  "Store publication"
   [conn {:keys [user tweet-id mongo-id url ts hashtags pub-type]}]
   (d/transact
    conn
@@ -105,6 +105,16 @@
      :publication/ts ts
      :publication/type pub-type
      :publication/hashtags hashtags}]))
+
+
+(defn find-pub-by-tweet-id
+  "Query for publication given a specific tweet id"
+  [conn id]
+  (ffirst
+   (d/q '[:find ?r
+          :in $ ?id
+          :where [?r :publication/tweet-id ?id]]
+        (d/db conn) id)))
 
 
 (defn transact-reaction
@@ -123,15 +133,18 @@
 
   (init-schema conn "schema.edn")
 
-
   (time
    (doall
     (pmap #(transact-user conn %) (mc/find-maps @db "users"))))
 
+  (def test-user (transact-user conn (first (mc/find-maps @db "users"))))
+
+
+  (aprint (:tx-data @test-user))
 
   (time
    (doall
-    (pmap
+    (map
      (comp
       (fn [{:keys [user tweet url ts]}]
         (transact-url conn {:url url :author user :ts ts :tweet-id tweet}))
@@ -142,12 +155,12 @@
      (take 1000 (mc/find-maps @db "urls")))))
 
 
-
   (->> (mc/find-maps @db "urls")
        (take 100)
        (pmap #(:id (mc/find-map-by-id @db "tweets" (:tweet %))))
        (into #{})
        count)
+
 
   (->> (d/q '[:find ?r ?url
               :where
@@ -155,20 +168,7 @@
             (d/db conn))
        count)
 
-
-
-  (->> (d/q '[:find ?r ?tid
-              :where
-              [?r :user/id ?tid]]
-            (d/db conn))
-       count)
-
-
-  (->> (mc/find-maps @db "urls")
-       vec
-       (pmap :url)
-       (into #{})
-       count)
+  (aprint (d/entity (d/db conn) (d/tempid :db.part/user)))
 
 
 )
