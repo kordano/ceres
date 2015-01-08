@@ -137,36 +137,33 @@
    (doall
     (pmap #(transact-user conn %) (mc/find-maps @db "users"))))
 
-  (def test-user (transact-user conn (first (mc/find-maps @db "users"))))
-
-
-  (aprint (:tx-data @test-user))
 
   (time
-   (doall
-    (map
-     (comp
-      (fn [{:keys [user tweet url ts]}]
-        (transact-url conn {:url url :author user :ts ts :tweet-id tweet}))
-      (fn [url]
-        (update-in url [:user] #(find-user conn (:id (mc/find-map-by-id @db "users" %)))))
-      (fn [url]
-        (update-in url [:tweet] #(:id (mc/find-map-by-id @db "tweets" %)))))
-     (take 1000 (mc/find-maps @db "urls")))))
+   (doseq [entry (mc/find-maps @db "urls")]
+     ((comp
+       (fn [{:keys [user tweet url ts]}]
+         (transact-url conn {:url url :author user :ts ts :tweet-id tweet}))
+       (fn [url]
+         (update-in url [:user] #(find-user conn (:id (mc/find-map-by-id @db "users" %)))))
+       (fn [url]
+         (update-in url [:tweet] #(:id (mc/find-map-by-id @db "tweets" %)))))
+      entry)))
 
 
   (->> (mc/find-maps @db "urls")
-       (take 100)
        (pmap #(:id (mc/find-map-by-id @db "tweets" (:tweet %))))
        (into #{})
        count)
 
 
-  (->> (d/q '[:find ?r ?url
+  (map #(d/q '[:find (count ?r)
+              :in $ ?name
               :where
-              [?r :url/address ?url]]
-            (d/db conn))
-       count)
+              [?r :url/address ?url]
+              [?r :url/author ?uid]
+              [?uid :user/screen-name ?name]]
+            (d/db conn) %) news-accounts)
+
 
   (aprint (d/entity (d/db conn) (d/tempid :db.part/user)))
 
