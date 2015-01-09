@@ -156,13 +156,18 @@
        count)
 
 
-  (map #(d/q '[:find (count ?r)
+  (pmap
+   (fn [acc]
+     [acc
+      (ffirst
+       (d/q '[:find (count ?r)
               :in $ ?name
               :where
               [?r :url/address ?url]
               [?r :url/author ?uid]
               [?uid :user/screen-name ?name]]
-            (d/db conn) %) news-accounts)
+            (d/db conn) acc))])
+   news-accounts)
 
 
   (aprint (d/entity (d/db conn) (d/tempid :db.part/user)))
