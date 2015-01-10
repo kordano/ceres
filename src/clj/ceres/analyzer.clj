@@ -265,8 +265,6 @@
      (mc/count @db "reactions"))
 
 
-  ;; asdasd
-
   (mc/count @db "origins" {:source nil
                                :ts time-interval })
 
@@ -294,24 +292,34 @@
        aprint)
 
 
-  (mc/count @db "urls")
+  (mc/count @db "publications" {:type :share})
 
-  (mc/count @db "articles" {:ts time-interval})
 
+
+
+  (->> (mc/find-maps @db "publications" {:type :share})
+       (take 100)
+       (pmap (fn [p] (->> (mc/find-map-by-id @db "tweets" (:tweet p)) :entities :urls first :expanded_url)))
+       (pmap #(mc/find-maps @db "urls" {:url %}))
+       (remove empty?)
+       count)
+
+  (->> (mc/find-maps @db "urls")
+       first)
+
+
+  (->> (mc/find-maps @db "publications" {:type :share})
+       (take 100)
+       (pmap (fn [p] (:article (mc/find-one-as-map @db "origins" {:tweet (:tweet p)}))))
+       (pmap (fn [a] (:url (mc/find-map-by-id @db "articles" a))))
+       aprint)
 
   (->> (mc/find-maps @db "articles" {:ts time-interval})
-       (pmap (comp (fn [{:keys [user]}] (:screen_name user)) #(mc/find-one-as-map @db "tweets" {:created_at %}) :ts))
-       (into #{}))
+       (take 100)
+       (pmap (fn [a] (mc/find-one-as-map @db "origins" {:article (:_id a)})))
+       (pmap :source)
+       (remove nil?)
+       count)
 
-
-  (mc/count @db "tweets" {:created_at time-interval
-                          :user.screen_name {$in news-accounts}})
-
-  (mc/count @db "tweets" {:created_at time-interval
-                          :user.screen_name {$nin news-accounts}
-                          :in_reply_to_status_id {$ne nil}
-                          :retweeted_status nil})
-
-  (mc/count @db "publications" {:type :reply})
 
   )
