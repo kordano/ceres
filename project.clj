@@ -53,7 +53,7 @@
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
 
   :plugins [[lein-cljsbuild "1.0.3"]
-            [lein-gorilla "0.3.3"]
+            [lein-gorilla "0.3.4"]
             [lein-figwheel "0.1.3-SNAPSHOT"]]
 
   :figwheel {:http-server-root "public"
