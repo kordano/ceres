@@ -15,7 +15,9 @@
             [clojure.core.async :refer [close! put! timeout sub chan <!! >!! <! >! go go-loop] :as async]
             [taoensso.timbre :refer [info debug error warn] :as timbre]))
 
+
 (timbre/refer-timbre)
+
 
 (deftemplate static-page
   (io/resource "public/index.html")
@@ -33,6 +35,7 @@
   [article]
   (-> (update-in article [:article] #(dissoc % :html :content-type))
       (update-in [:article :_id] str)))
+
 
 (defn extract-tweet-data
   "Prepares data for client"

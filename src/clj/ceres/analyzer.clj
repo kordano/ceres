@@ -295,8 +295,6 @@
   (mc/count @db "publications" {:type :share})
 
 
-
-
   (->> (mc/find-maps @db "publications" {:type :share})
        (take 100)
        (pmap (fn [p] (->> (mc/find-map-by-id @db "tweets" (:tweet p)) :entities :urls first :expanded_url)))
@@ -309,7 +307,7 @@
 
 
   (->> (mc/find-maps @db "publications" {:type :share})
-       (take 100)
+       (take 10)
        (pmap (fn [p] (:article (mc/find-one-as-map @db "origins" {:tweet (:tweet p)}))))
        (pmap (fn [a] (:url (mc/find-map-by-id @db "articles" a))))
        aprint)
@@ -320,6 +318,26 @@
        (pmap :source)
        (remove nil?)
        count)
+
+
+  (def degrees
+    (future
+      (->> (mc/find-maps @db "publications")
+           (pmap
+            (fn [p]
+              [(:_id p)
+               (+ (mc/count @db "reactions" {:publication (:_id p)})
+                  (mc/count @db "reactions" {:source (:_id p)}))])))))
+
+
+  (->> (sort-by second > @degrees)
+       (take 25)
+       (pmap #(mc/find-map-by-id @db "publications" (first %))))
+
+  (->> (map second @degrees)
+       frequencies
+       (sort-by second >)
+       (take 10))
 
 
   )
