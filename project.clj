@@ -19,6 +19,8 @@
                  [enlive "1.1.5"]
                  [http-kit "2.1.18"]
 
+                 [gg4clj "0.1.0"]
+
                  [com.datomic/datomic-free "0.9.4899"]
                  [facts/speech-synthesis "1.0.0"]
 
