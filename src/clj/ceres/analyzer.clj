@@ -30,7 +30,7 @@
 (defn short-metrics [coll]
   {:mean (mean coll)
    :std (Math/sqrt (variance coll))
-   :quantiles (quantile coll)})
+   :quantiles (quantile coll :probs [0.0 0.001 0.25 0.5 0.75 0.999 1.0])})
 
 
 (defn find-reactions [pid]
